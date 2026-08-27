@@ -7411,6 +7411,9 @@
         "startRecording": {
           "ariaLabel": "Démarrer l'enregistrement"
         },
+        "startingRecording": {
+          "ariaLabel": "Démarrage de l'enregistrement"
+        },
         "stopRecording": {
           "ariaLabel": "Arrêter l'enregistrement"
         }
