@@ -39,53 +39,40 @@ SENSITIVE_FILE_PATTERNS = (
     "*.kdbx",
 )
 
-# Grammars the image build extracts ahead of time. Anything outside this set
-# still extracts on demand from the same bundle. Names are checked against the
-# pack's manifest by a unit test.
-DEFAULT_CODE_GRAMMARS = (
-    "bash",
-    "c",
-    "cpp",
-    "csharp",
-    "css",
-    "dockerfile",
-    "go",
-    "gomod",
-    "graphql",
-    "hcl",
-    "html",
-    "ini",
-    "java",
-    "javascript",
-    "json",
-    "kotlin",
-    "lua",
-    "make",
-    "markdown",
-    "php",
-    "powershell",
-    "proto",
-    "python",
-    "ruby",
-    "rust",
-    "scala",
-    "scss",
-    "sql",
-    "swift",
-    "terraform",
-    "toml",
-    "tsx",
-    "typescript",
-    "xml",
-    "yaml",
-)
+# Grammars the pack resolves for prose and tabular formats. They parse, but
+# their chunk boundaries mean nothing for retrieval, and .csv/.tsv have a
+# TabularSection path built for them. Subtracted so each connector does not
+# have to rediscover that .txt resolves to the Vim help-file grammar.
+NON_CODE_LANGUAGES = frozenset({"vimdoc", "rst", "csv", "tsv"})
+
+
+# The pack's registry is extension-only, so the canonical extensionless names
+# resolve to nothing even though their grammars ship with it.
+BASENAME_LANGUAGES = {
+    "makefile": "make",
+    "gnumakefile": "make",
+    "dockerfile": "dockerfile",
+    "containerfile": "dockerfile",
+    "cmakelists.txt": "cmake",
+    "gemfile": "ruby",
+    "rakefile": "ruby",
+    "brewfile": "ruby",
+}
 
 
 def _detect_language(file_path: str | None) -> str | None:
     """Grammar name for a path, from tree-sitter-language-pack's extension
-    registry. None when the path is empty or the extension is unknown."""
+    registry plus the extensionless names it does not cover. None when the
+    path is empty or nothing matches."""
     if not file_path:
         return None
+    basename = PurePosixPath(file_path.replace("\\", "/")).name.lower()
+    known = BASENAME_LANGUAGES.get(basename)
+    if known is not None:
+        return known
+    # Dockerfile.dev / Dockerfile.prod and the like.
+    if basename.startswith("dockerfile."):
+        return "dockerfile"
     # Local import: keeps the language pack off the connector import path.
     from tree_sitter_language_pack import detect_language_from_path
 
@@ -113,11 +100,13 @@ def infer_code_language(file_path: str | None) -> str | None:
     code chunker can load. Returns None for unknown extensions and credential
     formats.
 
-    This is a grammar lookup, not a code-vs-prose judgment: prose formats
-    with grammars (e.g. .md -> markdown) return that grammar. Connectors that
-    must keep prose out of code indexing subtract their own document
-    extensions (e.g. the GitHub connector's docs set) before calling this.
+    Credential files and the prose/tabular grammars in NON_CODE_LANGUAGES are
+    refused here. Everything else is a grammar lookup rather than a
+    code-vs-prose judgment: markdown has a grammar and returns it, so
+    connectors that keep prose out of code indexing still subtract their own
+    document extensions (e.g. the GitHub connector's docs set).
     """
     if is_sensitive_code_file(file_path):
         return None
-    return _detect_language(file_path)
+    language = _detect_language(file_path)
+    return None if language in NON_CODE_LANGUAGES else language
