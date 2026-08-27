@@ -578,7 +578,8 @@ REDIS_WS_TOKEN_RATE_LIMIT_PREFIX = "ws_token_rate:"
 
 ZOOM_VOICE_SESSION_TENANT_LIMIT = 16
 ZOOM_VOICE_SESSION_USER_LIMIT = 2
-ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS = 15 * 60
+ZOOM_VOICE_SESSION_MAX_SECONDS = 10 * 60
+ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS = ZOOM_VOICE_SESSION_MAX_SECONDS + 60
 ZOOM_VOICE_SESSION_KEY_TTL_SECONDS = ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS + 60
 ZOOM_VOICE_SESSION_LIMIT_MESSAGE = "Zoom Scribe session limit reached. Try again later."
 
@@ -725,9 +726,13 @@ async def store_ws_token(token: str, user_id: str) -> None:
             f"Rate limit exceeded. Maximum {WS_TOKEN_RATE_LIMIT_MAX} tokens per minute."
         )
 
-    # Store the actual token
     redis_key = REDIS_WS_TOKEN_PREFIX + token
-    token_data = json.dumps({"sub": user_id})
+    token_data = json.dumps(
+        {
+            "sub": user_id,
+            "tenant_id": get_current_tenant_id(),
+        }
+    )
     await redis.set(redis_key, token_data, ex=WS_TOKEN_TTL_SECONDS)
 
 

@@ -19,6 +19,18 @@ class _FakeRedis:
         return self.result
 
 
+def test_zoom_voice_session_ttls_derive_from_hard_session_duration() -> None:
+    assert redis_pool.ZOOM_VOICE_SESSION_MAX_SECONDS == 10 * 60
+    assert (
+        redis_pool.ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS
+        == redis_pool.ZOOM_VOICE_SESSION_MAX_SECONDS + 60
+    )
+    assert (
+        redis_pool.ZOOM_VOICE_SESSION_KEY_TTL_SECONDS
+        == redis_pool.ZOOM_VOICE_SESSION_MEMBER_TTL_SECONDS + 60
+    )
+
+
 @pytest.mark.asyncio
 async def test_acquire_zoom_voice_session_admits_and_scopes_keys(monkeypatch) -> None:
     redis = _FakeRedis()
@@ -42,7 +54,7 @@ async def test_acquire_zoom_voice_session_admits_and_scopes_keys(monkeypatch) ->
         "zoom_voice_sessions:tenant:tenant-a:provider:42",
         "zoom_voice_sessions:tenant:tenant-a:provider:42:user:user-7",
         "session-member-1",
-        "1900000",
+        "1660000",
         "1000000",
         str(redis_pool.ZOOM_VOICE_SESSION_TENANT_LIMIT),
         str(redis_pool.ZOOM_VOICE_SESSION_USER_LIMIT),

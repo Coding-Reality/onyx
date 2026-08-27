@@ -17,6 +17,7 @@ from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider, fetch_default_tts_provider
 from onyx.redis.redis_pool import (
     ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
+    ZOOM_VOICE_SESSION_MAX_SECONDS,
     ZoomVoiceSessionLimitExceeded,
     acquire_zoom_voice_session,
     release_zoom_voice_session,
@@ -149,6 +150,9 @@ WS_MAX_TOTAL_BYTES = 25 * 1024 * 1024  # 25MB total per connection (matches REST
 WS_MAX_TEXT_MESSAGE_SIZE = 16 * 1024  # 16KB for text/JSON messages
 WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches REST API)
 WS_SERVER_ERROR_CLOSE_CODE = 1011
+ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE = (
+    "Zoom Scribe session reached its maximum duration. Start a new recording."
+)
 
 
 class ChunkedTranscriber:
@@ -619,7 +623,26 @@ async def websocket_transcribe(
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
                 logger.info("WebSocket transcribe: streaming transcriber created")
-                await handle_streaming_transcription(websocket, streaming_transcriber)
+                if provider_type == "zoom":
+                    await asyncio.wait_for(
+                        handle_streaming_transcription(
+                            websocket, streaming_transcriber
+                        ),
+                        timeout=ZOOM_VOICE_SESSION_MAX_SECONDS,
+                    )
+                else:
+                    await handle_streaming_transcription(
+                        websocket, streaming_transcriber
+                    )
+                return
+            except TimeoutError:
+                logger.info("WebSocket transcribe: Zoom streaming session timed out")
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
+                    }
+                )
                 return
             except Exception as e:
                 logger.error("WebSocket transcribe: streaming STT failed: %s", e)
