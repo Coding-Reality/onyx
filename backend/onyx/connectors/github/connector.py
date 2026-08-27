@@ -78,7 +78,11 @@ from onyx.file_processing.extract_file_text import (
 )
 from onyx.repo_archives.github import GitHubArchiveProvider
 from onyx.repo_archives.models import RepoRef
-from onyx.repo_archives.snapshot import RepoSnapshot, snapshot_or_none
+from onyx.repo_archives.snapshot import (
+    RepoSnapshot,
+    RepoSnapshotError,
+    snapshot_or_none,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -749,7 +753,9 @@ class GithubConnector(
         ONE archive fetch, or None when unavailable (callers fall back to the
         per-file content API). GitHub Enterprise deployments use the API path
         — the archive provider only speaks to github.com."""
-        if GITHUB_CONNECTOR_BASE_URL:
+        # A doc-only connector fetches a handful of markdown files. Trading
+        # those for a whole-repo download would be a straight regression.
+        if not self.include_code_files or GITHUB_CONNECTOR_BASE_URL:
             return None
         branch = self._resolve_branch(repo)
         cache_key = (repo.full_name, branch)
@@ -868,7 +874,7 @@ class GithubConnector(
         return self.branch or repo.default_branch
 
     def _list_indexable_files(
-        self, repo: Repository.Repository, attempt_num: int = 0
+        self, repo: Repository.Repository, is_slim: bool, attempt_num: int = 0
     ) -> tuple[list[str], bool]:
         """Resolve the configured (or default) branch tree and return indexable file paths.
 
@@ -884,8 +890,10 @@ class GithubConnector(
 
         # Snapshot-first: one tarball request lists (and later serves) every
         # file with zero per-file API calls, so large repos cannot rate-limit
-        # the file stage. Also immune to GitHub's tree truncation.
-        snapshot = self._ensure_snapshot(repo)
+        # the file stage. Also immune to GitHub's tree truncation. Slim runs
+        # want paths and nothing else, which one tree call already gives, and
+        # they run far more often than indexing.
+        snapshot = None if is_slim else self._ensure_snapshot(repo)
         if snapshot is not None:
             try:
                 paths = sorted(
@@ -899,9 +907,11 @@ class GithubConnector(
                     )
                 )
                 return paths, False
-            except Exception:
+            except (RepoSnapshotError, OSError):
                 # A concurrent prune can remove the snapshot mid-walk. The
-                # tree API listing below substitutes, so fall through.
+                # tree API listing below substitutes, so fall through. Narrow
+                # on purpose: a bug in the filter must surface instead of
+                # silently reverting to the rate-limiting path.
                 logger.warning(
                     "Listing files from the snapshot of %s failed; "
                     "falling back to the git tree API",
@@ -934,7 +944,7 @@ class GithubConnector(
             return paths, truncated
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(self.github_client)
-            return self._list_indexable_files(repo, attempt_num + 1)
+            return self._list_indexable_files(repo, is_slim, attempt_num + 1)
         except GithubException as e:
             if e.status == 404 and self.branch:
                 raise ConnectorValidationError(
@@ -1029,7 +1039,7 @@ class GithubConnector(
                 checkpoint.file_paths_include_code = self.include_code_files
             else:
                 logger.info("Listing files for repo: %s", repo.name)
-                paths, truncated = self._list_indexable_files(repo)
+                paths, truncated = self._list_indexable_files(repo, is_slim)
                 checkpoint.file_paths = paths
                 checkpoint.file_paths_branch = branch
                 checkpoint.file_paths_include_code = self.include_code_files
@@ -1084,7 +1094,7 @@ class GithubConnector(
                     try:
                         raw = snapshot.read_file(path, GITHUB_MAX_FILE_SIZE_BYTES)
                         commit_sha = snapshot_commit_sha
-                    except Exception as e:
+                    except (RepoSnapshotError, OSError) as e:
                         logger.warning(
                             "Reading %s from snapshot failed (%s); "
                             "falling back to the content API",
