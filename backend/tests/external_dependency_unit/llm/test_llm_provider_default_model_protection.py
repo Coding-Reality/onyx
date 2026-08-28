@@ -82,7 +82,7 @@ class TestDefaultModelProtection:
         update_default_provider(provider.id, "gpt-4o", db_session)
 
         # Try to update the provider without the default model
-        with pytest.raises(ValueError, match="Cannot remove the default model"):
+        with pytest.raises(ValueError, match=r"Cannot remove .* default model"):
             upsert_llm_provider(
                 LLMProviderUpsertRequest(
                     id=provider.id,
@@ -109,7 +109,7 @@ class TestDefaultModelProtection:
         update_default_provider(provider.id, "gpt-4o", db_session)
 
         # Try to hide the default model
-        with pytest.raises(ValueError, match="Cannot hide the default model"):
+        with pytest.raises(ValueError, match=r"Cannot hide .* default model"):
             upsert_llm_provider(
                 LLMProviderUpsertRequest(
                     id=provider.id,
@@ -141,7 +141,7 @@ class TestDefaultModelProtection:
         update_default_vision_provider(provider.id, "gpt-4o", db_session)
 
         # Try to remove the default vision model
-        with pytest.raises(ValueError, match="Cannot remove the default model"):
+        with pytest.raises(ValueError, match=r"Cannot remove .* default model"):
             upsert_llm_provider(
                 LLMProviderUpsertRequest(
                     id=provider.id,

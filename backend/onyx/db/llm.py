@@ -337,21 +337,28 @@ def upsert_llm_provider(
         mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
     ]
 
-    default_model = fetch_default_llm_model(db_session)
+    # Every flow that has a default, not just chat: the vision, contextual-RAG,
+    # reasoning and chat-naming defaults could be removed or hidden silently.
+    defaults_by_model_id = {}
+    for flow_type in LLMModelFlowType:
+        flow_default = fetch_default_model(db_session, flow_type)
+        if flow_default:
+            defaults_by_model_id.setdefault(flow_default.id, flow_type)
 
-    # Prevent removing and hiding the default model
-    if default_model:
-        for name, mc in existing_by_name.items():
-            if mc.id == default_model.id:
-                if default_model.id in removed_ids:
-                    raise ValueError(
-                        f"Cannot remove the default model '{name}'. Please change the default model before removing."
-                    )
-                if not requested_visibility.get(name, True):
-                    raise ValueError(
-                        f"Cannot hide the default model '{name}'. Please change the default model before hiding."
-                    )
-                break
+    for name, mc in existing_by_name.items():
+        flow_type = defaults_by_model_id.get(mc.id)
+        if flow_type is None:
+            continue
+        if mc.id in removed_ids:
+            raise ValueError(
+                f"Cannot remove '{name}': it is the deployment's "
+                f"{flow_type.value} default model. Change that default first."
+            )
+        if not requested_visibility.get(name, True):
+            raise ValueError(
+                f"Cannot hide '{name}': it is the deployment's "
+                f"{flow_type.value} default model. Change that default first."
+            )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
