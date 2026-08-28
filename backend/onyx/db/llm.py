@@ -348,6 +348,24 @@ def upsert_llm_provider(
         for mc in llm_provider_upsert_request.model_configurations
     }
 
+    # supports_image_input and supports_reasoning are optional, so an omitted one
+    # used to read as false and drop the flow — taking any deployment default that
+    # flow carried with it. Merge them against what is stored, the same way the
+    # reasoning and temperature fields below are merged.
+    merged_capabilities: dict[str, set[LLMModelFlowType]] = {}
+    for mc_request in llm_provider_upsert_request.model_configurations:
+        existing_mc = existing_by_name.get(mc_request.name)
+        stored_flows = set(existing_mc.llm_model_flow_types) if existing_mc else set()
+        merged: set[LLMModelFlowType] = set()
+        for capability_flow, sent in (
+            (LLMModelFlowType.VISION, mc_request.supports_image_input),
+            (LLMModelFlowType.REASONING, mc_request.supports_reasoning),
+        ):
+            keeps = sent if sent is not None else capability_flow in stored_flows
+            if keeps:
+                merged.add(capability_flow)
+        merged_capabilities[mc_request.name] = merged
+
     # Delete removed models, unless the caller asked to keep what it did not send
     removed_ids = (
         []
@@ -381,6 +399,16 @@ def upsert_llm_provider(
                 f"Cannot hide '{name}': it is the deployment's "
                 f"{flow_type.value} default model. Change that default first."
             )
+        if (
+            name in merged_capabilities
+            and flow_type in (LLMModelFlowType.VISION, LLMModelFlowType.REASONING)
+            and flow_type not in merged_capabilities[name]
+        ):
+            raise ValueError(
+                f"Cannot disable {flow_type.value} support on '{name}': it is the "
+                f"deployment's {flow_type.value} default model. Change that "
+                "default first."
+            )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
@@ -390,10 +418,7 @@ def upsert_llm_provider(
 
     for model_config in llm_provider_upsert_request.model_configurations:
         supported_flows = [LLMModelFlowType.CHAT]
-        if model_config.supports_image_input:
-            supported_flows.append(LLMModelFlowType.VISION)
-        if model_config.supports_reasoning:
-            supported_flows.append(LLMModelFlowType.REASONING)
+        supported_flows.extend(merged_capabilities.get(model_config.name, set()))
 
         existing = existing_by_name.get(model_config.name)
         if existing:
@@ -1339,10 +1364,20 @@ def update_model_configuration__no_commit(
         for flow_type in supported_flows
         if flow_type not in model_configuration.llm_model_flow_types
     }
+    # Only the capability-derived flows are reconciled here. CONTEXTUAL_RAG and
+    # CHAT_NAMING are set by their own endpoints and are implied by no supports_*
+    # field, so they are never in supported_flows — without this filter an
+    # ordinary provider update deletes them, and the deployment default each one
+    # carries goes with it.
+    reconciled_flows = {
+        LLMModelFlowType.CHAT,
+        LLMModelFlowType.VISION,
+        LLMModelFlowType.REASONING,
+    }
     removed_flows = {
         flow_type
         for flow_type in model_configuration.llm_model_flow_types
-        if flow_type not in supported_flows
+        if flow_type not in supported_flows and flow_type in reconciled_flows
     }
 
     for flow_type in new_flows:
