@@ -348,10 +348,16 @@ def upsert_llm_provider(
         for mc in llm_provider_upsert_request.model_configurations
     }
 
-    # Delete removed models
-    removed_ids = [
-        mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
-    ]
+    # Delete removed models, unless the caller asked to keep what it did not send
+    removed_ids = (
+        []
+        if llm_provider_upsert_request.keep_existing_models
+        else [
+            mc.id
+            for name, mc in existing_by_name.items()
+            if name not in models_to_exist
+        ]
+    )
 
     # Every flow that has a default, not just chat: the vision, contextual-RAG,
     # reasoning and chat-naming defaults could be removed or hidden silently.
