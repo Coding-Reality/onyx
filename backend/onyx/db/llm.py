@@ -361,7 +361,7 @@ def upsert_llm_provider(
 
     # Every flow that has a default, not just chat: the vision, contextual-RAG,
     # reasoning and chat-naming defaults could be removed or hidden silently.
-    defaults_by_model_id = {}
+    defaults_by_model_id: dict[int, LLMModelFlowType] = {}
     for flow_type in LLMModelFlowType:
         flow_default = fetch_default_model(db_session, flow_type)
         if flow_default:
