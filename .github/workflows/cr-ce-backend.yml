@@ -6,6 +6,7 @@ on:
       - cr/main
     paths:
       - backend/**
+      - '!backend/tests/**'
       - .github/workflows/cr-ce-backend.yml
   workflow_dispatch:
 
@@ -68,3 +69,11 @@ jobs:
 
       - name: Record immutable image
         run: echo 'ghcr.io/coding-reality/onyx-backend@${{ steps.build.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the MIT CE package for unauthenticated pulls
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method PATCH \
+            "/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/onyx-backend" \
+            -f visibility=public
