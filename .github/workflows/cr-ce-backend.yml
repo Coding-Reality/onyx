@@ -71,3 +71,9 @@ jobs:
 
       - name: Record immutable image
         run: echo 'ghcr.io/coding-reality/onyx-backend@${{ steps.build.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Audit the published CE filesystem
+        run: |
+          docker run --rm --entrypoint /bin/sh \
+            "ghcr.io/coding-reality/onyx-backend:${{ steps.meta.outputs.version }}" \
+            -c 'test ! -e /app/ee && test -d /app/cr_onyx && test -f /app/scripts/cr_tenant_control.py'
