@@ -1,0 +1,70 @@
+name: Build Coding Reality CE backend
+
+on:
+  push:
+    branches:
+      - cr/main
+    paths:
+      - backend/**
+      - .github/workflows/cr-ce-backend.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cr-ce-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+        with:
+          persist-credentials: false
+
+      - name: Prove the CE image excludes Enterprise inputs
+        run: |
+          ! grep -Eq 'requirements/ee|COPY( --[^ ]+)? .*\./ee([ /]|$)' backend/Dockerfile
+          ! grep -Eq 'seed_dev_license' backend/Dockerfile
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/coding-reality/onyx-backend
+          tags: |
+            type=sha,prefix=cr-v4.6.5-
+
+      - name: Build and push CE backend
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONYX_VERSION=cr-v4.6.5-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Record immutable image
+        run: echo 'ghcr.io/coding-reality/onyx-backend@${{ steps.build.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"
