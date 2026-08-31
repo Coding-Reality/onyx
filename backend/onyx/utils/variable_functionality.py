@@ -32,7 +32,15 @@ def fetch_ce_extension_implementation(module: str, attribute: str) -> Any:
     try:
         imported_module = importlib.import_module(extension_module)
     except ModuleNotFoundError as error:
-        if error.name == extension_module:
+        # importlib reports the first missing package in the module path.  An
+        # extension is intentionally allowed to override only a subset of
+        # Onyx, so a missing parent below the configured extension namespace
+        # means "no override" as well.  Do not swallow missing third-party
+        # dependencies imported by an extension module.
+        if error.name and (
+            error.name == extension_module
+            or extension_module.startswith(f"{error.name}.")
+        ):
             return _EXTENSION_MISSING
         raise
 
