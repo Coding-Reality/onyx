@@ -17,6 +17,27 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+CE_EXTENSION_PACKAGE = os.environ.get("ONYX_CE_EXTENSION_PACKAGE", "").strip()
+_EXTENSION_MISSING = object()
+
+
+@functools.lru_cache(maxsize=128)
+def fetch_ce_extension_implementation(module: str, attribute: str) -> Any:
+    """Load an optional MIT extension without enabling Enterprise Edition."""
+    if not CE_EXTENSION_PACKAGE:
+        return _EXTENSION_MISSING
+
+    module_suffix = module.removeprefix("onyx.")
+    extension_module = f"{CE_EXTENSION_PACKAGE}.{module_suffix}"
+    try:
+        imported_module = importlib.import_module(extension_module)
+    except ModuleNotFoundError as error:
+        if error.name == extension_module:
+            return _EXTENSION_MISSING
+        raise
+
+    return getattr(imported_module, attribute, _EXTENSION_MISSING)
+
 
 class OnyxVersion:
     def __init__(self) -> None:
@@ -98,6 +119,11 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
     """
     logger.debug("Fetching versioned implementation for %s.%s", module, attribute)
     is_ee = global_version.is_ee_version()
+
+    if not is_ee:
+        extension_implementation = fetch_ce_extension_implementation(module, attribute)
+        if extension_implementation is not _EXTENSION_MISSING:
+            return extension_implementation
 
     module_full = f"ee.{module}" if is_ee else module
     try:
@@ -181,6 +207,10 @@ def fetch_ee_implementation_or_noop(
     Raises:
         Exception: If EE is enabled but the fetch fails.
     """
+    extension_implementation = fetch_ce_extension_implementation(module, attribute)
+    if extension_implementation is not _EXTENSION_MISSING:
+        return extension_implementation
+
     if not global_version.is_ee_version():
         if inspect.iscoroutinefunction(noop_return_value):
 
