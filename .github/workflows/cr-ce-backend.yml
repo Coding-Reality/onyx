@@ -50,6 +50,8 @@ jobs:
           images: ghcr.io/coding-reality/onyx-backend
           tags: |
             type=sha,prefix=cr-v4.6.5-
+          labels: |
+            org.opencontainers.image.licenses=MIT
 
       - name: Build and push CE backend
         id: build
@@ -69,11 +71,3 @@ jobs:
 
       - name: Record immutable image
         run: echo 'ghcr.io/coding-reality/onyx-backend@${{ steps.build.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Publish the MIT CE package for unauthenticated pulls
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api --method PATCH \
-            "/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/onyx-backend" \
-            -f visibility=public
