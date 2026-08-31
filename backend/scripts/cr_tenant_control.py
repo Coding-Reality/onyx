@@ -33,6 +33,16 @@ def _migrate_tenant_schema(schema_name: str) -> None:
     )
 
 
+def _migrate_public_schema() -> None:
+    """Apply upstream multi-tenant catalog migrations before CR tables."""
+    backend_dir = Path(__file__).resolve().parents[1]
+    subprocess.run(
+        ["alembic", "-n", "schema_private", "upgrade", "head"],
+        cwd=backend_dir,
+        check=True,
+    )
+
+
 def _initialize_tenant(schema_name: str) -> None:
     context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(schema_name)
     try:
@@ -80,6 +90,7 @@ def main() -> None:
     _initialize_database_engine()
 
     if args.command == "migrate-control-plane":
+        _migrate_public_schema()
         apply_control_plane_migration()
         return
     if args.command == "create-tenant":
