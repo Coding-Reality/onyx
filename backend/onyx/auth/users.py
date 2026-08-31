@@ -1632,6 +1632,10 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         if result.sub is None:
             return None
 
+        if MULTI_TENANT and result.tenant_id != get_current_tenant_id():
+            logger.warning("Rejected a session token for a different tenant")
+            return None
+
         try:
             parsed_id = user_manager.parse_id(result.sub)
             return await user_manager.get(parsed_id)

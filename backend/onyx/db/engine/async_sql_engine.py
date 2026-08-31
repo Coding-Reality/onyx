@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncContextManager
 
 from fastapi import HTTPException
-from sqlalchemy import event, pool
+from sqlalchemy import event, pool, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from onyx.configs.app_configs import (
@@ -197,6 +197,9 @@ async def get_async_session(
     async with engine.connect() as connection:
         connection = await connection.execution_options(
             schema_translate_map=schema_translate_map
+        )
+        await connection.execute(
+            text(f'SET LOCAL search_path TO "{tenant_id}", public')
         )
         async with AsyncSession(
             bind=connection, expire_on_commit=False
