@@ -1438,6 +1438,12 @@ def get_ingestion_documents(
     return list(documents)
 
 
+def check_ingestion_documents_exist(db_session: Session) -> bool:
+    """Return whether the tenant has knowledge supplied through the ingestion API."""
+    stmt = select(exists(DbDocument).where(DbDocument.from_ingestion_api.is_(True)))
+    return bool(db_session.scalar(stmt))
+
+
 def get_documents_by_cc_pair(
     cc_pair_id: int,
     db_session: Session,

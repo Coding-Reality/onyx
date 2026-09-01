@@ -68,6 +68,7 @@ from onyx.db.connector import (
     check_federated_connectors_exist,
     fetch_unique_document_sources,
 )
+from onyx.db.document import check_ingestion_documents_exist
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
@@ -541,6 +542,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             check_connectors_exist(db_session)
             or check_federated_connectors_exist(db_session)
             or check_user_files_exist(db_session)
+            or check_ingestion_documents_exist(db_session)
         )
 
     @property

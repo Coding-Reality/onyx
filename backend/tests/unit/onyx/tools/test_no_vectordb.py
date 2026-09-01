@@ -36,6 +36,34 @@ def test_search_tool_available_when_vector_db_enabled(
     assert SearchTool.is_available(db_session) is True
 
 
+@patch("onyx.configs.app_configs.DISABLE_VECTOR_DB", False)
+@patch(
+    "onyx.tools.tool_implementations.search.search_tool.check_ingestion_documents_exist",
+    return_value=True,
+)
+@patch(
+    "onyx.db.connector.check_user_files_exist",
+    return_value=False,
+)
+@patch(
+    "onyx.tools.tool_implementations.search.search_tool.check_federated_connectors_exist",
+    return_value=False,
+)
+@patch(
+    "onyx.tools.tool_implementations.search.search_tool.check_connectors_exist",
+    return_value=False,
+)
+def test_search_tool_available_for_ingestion_api_knowledge(
+    _mock_connectors: MagicMock,
+    _mock_federated: MagicMock,
+    _mock_user_files: MagicMock,
+    _mock_ingestion_documents: MagicMock,
+) -> None:
+    from onyx.tools.tool_implementations.search.search_tool import SearchTool
+
+    assert SearchTool.is_available(MagicMock(spec=Session)) is True
+
+
 # ------------------------------------------------------------------
 # OpenURLTool — crawl-only when vector DB is disabled
 # ------------------------------------------------------------------
