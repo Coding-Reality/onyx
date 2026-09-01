@@ -1,9 +1,9 @@
-import { buildUrl } from "./utilsSS";
+import { fetchSS } from "./utilsSS";
 
 // Maybe improve type-safety by creating a 'VersionType' instead of generic string
 export const getBackendVersion = async (): Promise<string | null> => {
   try {
-    const res = await fetch(buildUrl("/version"));
+    const res = await fetchSS("/version");
     if (!res.ok) {
       //throw new Error("Failed to fetch data");
       return null;

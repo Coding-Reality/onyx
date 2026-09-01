@@ -1,6 +1,35 @@
 import { cookies, headers } from "next/headers";
-import { HOST_URL, INTERNAL_URL } from "./constants";
-import { processCookies } from "@/lib/users/svcSS";
+import {
+  HOST_URL,
+  INTERNAL_URL,
+  SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
+} from "./constants";
+import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
+
+export function processCookies(cookies: ReadonlyRequestCookies): string {
+  let cookieString = cookies
+    .getAll()
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join("; ");
+
+  // Inject debug auth cookie for local development against remote backend
+  // only when the normal auth cookie is not already present.
+  if (process.env.DEBUG_AUTH_COOKIE && process.env.NODE_ENV === "development") {
+    const hasAuthCookie = cookieString
+      .split(/;\s*/)
+      .some((cookie) =>
+        cookie.startsWith(`${SERVER_SIDE_ONLY__AUTH_COOKIE_NAME}=`)
+      );
+    if (!hasAuthCookie) {
+      const debugCookie = `${SERVER_SIDE_ONLY__AUTH_COOKIE_NAME}=${process.env.DEBUG_AUTH_COOKIE}`;
+      cookieString = cookieString
+        ? `${cookieString}; ${debugCookie}`
+        : debugCookie;
+    }
+  }
+
+  return cookieString;
+}
 
 export function buildClientUrl(path: string) {
   if (path.startsWith("/")) {
