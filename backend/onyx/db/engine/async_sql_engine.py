@@ -198,12 +198,15 @@ async def get_async_session(
         connection = await connection.execution_options(
             schema_translate_map=schema_translate_map
         )
-        await connection.execute(
-            text(f'SET LOCAL search_path TO "{tenant_id}", public')
-        )
         async with AsyncSession(
             bind=connection, expire_on_commit=False
         ) as async_session:
+            # The Session must own the transaction so session.commit() is a
+            # real commit rather than a nested commit followed by an outer
+            # connection rollback.
+            await async_session.execute(
+                text(f'SET LOCAL search_path TO "{tenant_id}", public')
+            )
             yield async_session
 
 

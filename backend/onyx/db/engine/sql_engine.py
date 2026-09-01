@@ -542,11 +542,15 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
     with engine.connect().execution_options(
         schema_translate_map=schema_translate_map
     ) as connection:
-        # Raw SQL does not use SQLAlchemy's schema translation. Set the same
-        # tenant search path for this transaction so both access paths agree.
-        connection.execute(text(f'SET LOCAL search_path TO "{tenant_id}", public'))
         session = Session(bind=connection, expire_on_commit=False)
         try:
+            # Start the transaction through the Session. If SET LOCAL is run
+            # directly on the connection first, Session.commit() only closes
+            # its nested transaction and the connection context rolls every
+            # tenant write back on exit.
+            session.execute(
+                text(f'SET LOCAL search_path TO "{tenant_id}", public')
+            )
             yield session
         finally:
             _safe_close_session(session)
@@ -593,6 +597,8 @@ def get_db_readonly_user_session_with_current_tenant() -> Generator[
     with readonly_engine.connect().execution_options(
         schema_translate_map=schema_translate_map
     ) as connection:
-        connection.execute(text(f'SET LOCAL search_path TO "{tenant_id}", public'))
         with Session(bind=connection, expire_on_commit=False) as session:
+            session.execute(
+                text(f'SET LOCAL search_path TO "{tenant_id}", public')
+            )
             yield session
