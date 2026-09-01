@@ -60,21 +60,24 @@ export class UrlBuilder {
 export async function fetchSS(url: string, options?: RequestInit) {
   const cookieString = processCookies(await cookies());
   const incomingHeaders = await headers();
-  const originalHost = (
+  const requestHost = (
     incomingHeaders.get("x-forwarded-host") ?? incomingHeaders.get("host")
   )
     ?.split(",", 1)[0]
     ?.trim();
+  const configuredHost = new URL(HOST_URL).host;
+  const tenantHost = configuredHost || requestHost;
   const requestHeaders = new Headers(options?.headers);
   requestHeaders.set("cookie", cookieString);
 
   // INTERNAL_URL points at the Kubernetes service, but tenancy is resolved
-  // from an operator-owned external host map. Preserve the original request
-  // host for server-side API calls; the backend still fails closed when that
-  // host is not mapped and never trusts a caller-supplied tenant ID.
-  if (originalHost) {
-    requestHeaders.set("host", originalHost);
-    requestHeaders.set("x-forwarded-host", originalHost);
+  // from an operator-owned external host map. WEB_DOMAIN is the authoritative
+  // external host for this server instance; Next.js may normalize request
+  // context headers to its internal service name during server rendering.
+  // The backend still fails closed if this configured host is not mapped.
+  if (tenantHost) {
+    requestHeaders.set("host", tenantHost);
+    requestHeaders.set("x-forwarded-host", tenantHost);
   }
 
   const init: RequestInit = {
