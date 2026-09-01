@@ -97,7 +97,8 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
         enterpriseSettings = await enterpriseResponse.json();
       } else if (
         enterpriseResponse.status !== 403 &&
-        enterpriseResponse.status !== 401
+        enterpriseResponse.status !== 401 &&
+        enterpriseResponse.status !== 404
       ) {
         throw new Error(
           `fetchSettingsSS: enterprise failed status=${
@@ -111,7 +112,11 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     if (analyticsResponse) {
       if (analyticsResponse.ok) {
         customAnalyticsScript = await analyticsResponse.json();
-      } else if (analyticsResponse.status !== 403) {
+      } else if (
+        analyticsResponse.status !== 403 &&
+        analyticsResponse.status !== 401 &&
+        analyticsResponse.status !== 404
+      ) {
         throw new Error(
           `fetchSettingsSS: analytics failed status=${
             analyticsResponse.status

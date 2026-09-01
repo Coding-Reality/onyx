@@ -47,6 +47,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # https://github.com/vercel/next.js/discussions/14030
 # NOTE: if you add something here, make sure to add it to the runner as well
 
+# The web server evaluates these while Next.js builds server modules. Keep the
+# Community Edition default explicit so an omitted argument cannot bake the
+# backend's paid/license-enforcement default into the frontend bundle.
+ARG ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false
+ENV ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES}
+
+ARG LICENSE_ENFORCEMENT_ENABLED=false
+ENV LICENSE_ENFORCEMENT_ENABLED=${LICENSE_ENFORCEMENT_ENABLED}
+
+ARG NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES=false
+ENV NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES=${NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES}
+
 
 ARG NEXT_PUBLIC_THEME
 ENV NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME}
@@ -134,6 +146,17 @@ COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
 # Environment variables must be redefined at run time
 # NOTE: if you add something here, make sure to add it to the builder as well
+
+# Match the build-time CE mode at runtime. Kubernetes may override these image
+# defaults, but CE images must remain safe when no environment is supplied.
+ARG ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false
+ENV ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES}
+
+ARG LICENSE_ENFORCEMENT_ENABLED=false
+ENV LICENSE_ENFORCEMENT_ENABLED=${LICENSE_ENFORCEMENT_ENABLED}
+
+ARG NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES=false
+ENV NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES=${NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES}
 
 
 # allow user to specify custom feedback options
