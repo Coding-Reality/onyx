@@ -68,7 +68,7 @@ export default async function Page(props: PageProps) {
 
   // get where to send the user to authenticate
   let authUrl: string | null = null;
-  if (authTypeMetadata) {
+  if (authTypeMetadata?.oauthEnabled) {
     try {
       authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, nextUrl);
     } catch (e) {
