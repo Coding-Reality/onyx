@@ -29,7 +29,8 @@ export interface AuthTypeMetadata {
   oauthEnabled: boolean;
   // Admin kill switch (single-tenant). False hides password login and signup.
   passwordAuthEnabled: boolean;
-  // Enabled DB-backed SSO providers, one login button each. Empty on cloud
-  // and when no provider rows exist.
+  // Whether the current workspace may manage its own SSO provider rows.
+  ssoConfigurationEnabled: boolean;
+  // Enabled tenant-scoped DB-backed SSO providers, one login button each.
   ssoProviders?: SSOProviderOption[];
 }

@@ -292,6 +292,26 @@ def test_decode_state_rejects_wrong_provider() -> None:
         )
 
 
+def test_multi_tenant_state_is_bound_to_current_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oidc_multi, "MULTI_TENANT", True)
+    monkeypatch.setattr(oidc_multi, "get_current_tenant_id", lambda: "tenant_expected")
+    oidc_multi._validate_tenant_state({"tenant_id": "tenant_expected"})
+
+    with pytest.raises(OnyxError, match="OAuth tenant mismatch"):
+        oidc_multi._validate_tenant_state({"tenant_id": "tenant_other"})
+
+
+def test_multi_tenant_state_rejects_legacy_unbound_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oidc_multi, "MULTI_TENANT", True)
+    monkeypatch.setattr(oidc_multi, "get_current_tenant_id", lambda: "tenant_expected")
+    with pytest.raises(OnyxError, match="OAuth tenant mismatch"):
+        oidc_multi._validate_tenant_state({})
+
+
 def test_decode_state_rejects_bad_jwt() -> None:
     request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: "x"}))
     with pytest.raises(OnyxError):

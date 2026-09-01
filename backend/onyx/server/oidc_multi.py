@@ -55,7 +55,9 @@ from onyx.db.sso_provider import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.sso.policy import sso_provider_type_allowed, sso_web_domain
 from onyx.utils.url import sanitize_next_url
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/auth/oidc")
@@ -85,6 +87,8 @@ def _resolve_oidc_provider(
         SSOProviderType.GOOGLE_OAUTH,
         SSOProviderType.OIDC,
     ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider")
+    if not sso_provider_type_allowed(provider.provider_type):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider")
     if provider.config is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider")
@@ -197,11 +201,27 @@ def _set_oauth_cookie(
     )
 
 
-def _callback_uri(provider: SSOProvider, config: dict[str, Any]) -> str:
+def _validate_tenant_state(state_data: dict[str, Any]) -> None:
+    """Bind an OAuth round trip to the tenant that initiated it.
+
+    Host middleware resolves the callback tenant independently.  The signed
+    state must agree so a state/code initiated on one tenant host cannot be
+    replayed against another tenant's same-named provider route.
+    """
+    if not MULTI_TENANT:
+        return
+    if state_data.get("tenant_id") != get_current_tenant_id():
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "OAuth tenant mismatch")
+
+
+def _callback_uri(
+    provider: SSOProvider, config: dict[str, Any], request: Request | None = None
+) -> str:
     # Legacy-callback rows land on the web wrappers at the legacy paths, which
     # forward to this router. The fixed /callback below resolves the row from
     # the signed state.
-    return sso_login_callback_uri(provider, config, WEB_DOMAIN)
+    web_domain = sso_web_domain(request) if request is not None else WEB_DOMAIN
+    return sso_login_callback_uri(provider, config, web_domain)
 
 
 @router.get("/{provider_name}/authorize")
@@ -212,7 +232,7 @@ async def oidc_login_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = _callback_uri(provider, config)
+    redirect_uri = _callback_uri(provider, config, request)
     next_url = sanitize_next_url(request.query_params.get("next"))
     csrf_token = generate_csrf_token()
     use_pkce = _pkce_enabled(config)
@@ -220,6 +240,7 @@ async def oidc_login_for_provider(
         {
             "next_url": next_url,
             "provider_name": provider_name,
+            "tenant_id": get_current_tenant_id(),
             # Pins this flow's PKCE mode, so a provider edit mid-login cannot
             # make the callback disagree with the authorization request.
             "pkce": use_pkce,
@@ -293,6 +314,7 @@ async def oidc_login_callback(
         state_value=state,
         state_secret=USER_AUTH_SECRET,
     )
+    _validate_tenant_state(state_data)
     provider_name = state_data.get("provider_name")
     if not provider_name:
         raise OnyxError(
@@ -325,7 +347,7 @@ async def oidc_login_callback_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = _callback_uri(provider, config)
+    redirect_uri = _callback_uri(provider, config, request)
 
     if error is not None:
         raise OnyxError(
@@ -349,6 +371,7 @@ async def oidc_login_callback_for_provider(
         state_secret=USER_AUTH_SECRET,
         expected_provider_name=provider_name,
     )
+    _validate_tenant_state(state_data)
 
     # The state pins the flow's PKCE mode. States without the claim fall back
     # to the row's current setting so logins in flight across a deploy complete.

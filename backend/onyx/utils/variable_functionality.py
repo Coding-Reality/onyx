@@ -19,6 +19,7 @@ logger = setup_logger()
 
 CE_EXTENSION_PACKAGE = os.environ.get("ONYX_CE_EXTENSION_PACKAGE", "").strip()
 _EXTENSION_MISSING = object()
+T = TypeVar("T")
 
 
 @functools.lru_cache(maxsize=128)
@@ -45,6 +46,21 @@ def fetch_ce_extension_implementation(module: str, attribute: str) -> Any:
         raise
 
     return getattr(imported_module, attribute, _EXTENSION_MISSING)
+
+
+def fetch_ce_extension_implementation_with_fallback(
+    module: str, attribute: str, fallback: T
+) -> T:
+    """Return a Community extension hook without consulting Enterprise code.
+
+    This is the appropriate bridge for optional MIT-licensed functionality that
+    extends Community Edition.  It deliberately does not inspect the EE package,
+    license state, or paid-feature flags.
+    """
+    implementation = fetch_ce_extension_implementation(module, attribute)
+    if implementation is _EXTENSION_MISSING:
+        return fallback
+    return implementation
 
 
 class OnyxVersion:
@@ -157,9 +173,6 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
             return getattr(importlib.import_module(module), attribute)
 
         raise
-
-
-T = TypeVar("T")
 
 
 def fetch_versioned_implementation_with_fallback(

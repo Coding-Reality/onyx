@@ -47,6 +47,28 @@ export default function LoginPage({
       {authTypeMetadata?.multiTenant === true && (
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
+          {ssoProviders.length > 0 && (
+            <>
+              <div className="flex flex-col w-full gap-4">
+                {ssoProviders.map((provider) => (
+                  <ProviderSignInButton
+                    key={provider.name}
+                    provider={provider}
+                    nextUrl={effectiveNextUrl}
+                  />
+                ))}
+              </div>
+              {passwordAuthEnabled && (
+                <div className="flex flex-row items-center w-full gap-2">
+                  <div className="flex-1 border-t border-text-01" />
+                  <Text as="p" text03 mainUiMuted>
+                    or
+                  </Text>
+                  <div className="flex-1 border-t border-text-01" />
+                </div>
+              )}
+            </>
+          )}
           {authUrl && authTypeMetadata && (
             <>
               <SignInButton authorizeUrl={authUrl} />
@@ -59,12 +81,14 @@ export default function LoginPage({
               </div>
             </>
           )}
-          <EmailPasswordForm
-            label="submit"
-            shouldVerify={true}
-            nextUrl={effectiveNextUrl}
-          />
-          {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
+          {passwordAuthEnabled && (
+            <EmailPasswordForm
+              label="submit"
+              shouldVerify={true}
+              nextUrl={effectiveNextUrl}
+            />
+          )}
+          {passwordAuthEnabled && NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
             <Button href="/auth/forgot-password">Reset Password</Button>
           )}
         </div>

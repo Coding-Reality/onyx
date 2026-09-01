@@ -14,6 +14,7 @@ interface AuthTypeAPIResponse {
   has_users: boolean;
   oauth_enabled: boolean;
   password_auth_enabled?: boolean;
+  sso_configuration_enabled?: boolean;
   sso_providers?: {
     name: string;
     display_name: string;
@@ -45,6 +46,7 @@ export async function fetchAuthTypeMetadata(
     hasUsers: data.has_users,
     oauthEnabled: data.oauth_enabled,
     passwordAuthEnabled: data.password_auth_enabled ?? true,
+    ssoConfigurationEnabled: data.sso_configuration_enabled ?? false,
     ssoProviders: (data.sso_providers ?? []).map((provider) => ({
       name: provider.name,
       displayName: provider.display_name,

@@ -34,6 +34,9 @@ def _resolve_membership(
     oauth_name: str | None = None,
     account_id: str | None = None,
 ) -> str:
+    if (oauth_name is None) != (account_id is None):
+        raise fastapi_users_exceptions.UserNotExists()
+
     tenant_id = get_current_tenant_id()
     with _tenant_catalog_session(tenant_id) as session:
         row = session.execute(
@@ -43,14 +46,18 @@ def _resolve_membership(
                 FROM public.cr_tenant_membership AS membership
                 JOIN public.cr_tenant AS tenant ON tenant.id = membership.tenant_id
                 WHERE membership.tenant_id = :tenant_id
-                  AND membership.email = :email
                   AND tenant.status = 'active'
                   AND (
-                    membership.oauth_subject IS NULL
-                    OR (
-                      membership.oauth_provider = :oauth_name
-                      AND membership.oauth_subject = :account_id
-                    )
+                    (:oauth_identity_supplied = false
+                     AND membership.email = :email)
+                    OR
+                    (:oauth_identity_supplied = true AND (
+                      (membership.oauth_provider = :oauth_name
+                       AND membership.oauth_subject = :account_id)
+                      OR
+                      (membership.oauth_subject IS NULL
+                       AND membership.email = :email)
+                    ))
                   )
                 """
             ),
@@ -59,6 +66,7 @@ def _resolve_membership(
                 "email": _normalized_email(email),
                 "oauth_name": oauth_name,
                 "account_id": account_id,
+                "oauth_identity_supplied": oauth_name is not None,
             },
         ).scalar_one_or_none()
     if row != tenant_id:
@@ -68,6 +76,36 @@ def _resolve_membership(
 
 def get_tenant_id_for_email(email: str) -> str:
     return _resolve_membership(email)
+
+
+def get_new_user_role(email: str) -> str:
+    """Return the role provisioned in the tenant control plane.
+
+    OAuth registration has already resolved the same active membership before
+    this is called.  Re-reading under RLS prevents a first-login user marked
+    ``user`` from becoming admin merely because their tenant schema is empty.
+    """
+    tenant_id = get_current_tenant_id()
+    with _tenant_catalog_session(tenant_id) as session:
+        role = session.execute(
+            text(
+                """
+                SELECT membership.role
+                FROM public.cr_tenant_membership AS membership
+                JOIN public.cr_tenant AS tenant ON tenant.id = membership.tenant_id
+                WHERE membership.tenant_id = :tenant_id
+                  AND membership.email = :email
+                  AND tenant.status = 'active'
+                """
+            ),
+            {
+                "tenant_id": _tenant_uuid(tenant_id),
+                "email": _normalized_email(email),
+            },
+        ).scalar_one_or_none()
+    if role not in {"admin", "user"}:
+        raise fastapi_users_exceptions.UserNotExists()
+    return role
 
 
 def resolve_tenant_id(

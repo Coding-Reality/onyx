@@ -24,6 +24,7 @@ import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { markdown } from "@opal/utils";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 
 const SECTIONS = {
   UNLABELED: null,
@@ -53,7 +54,8 @@ function buildItems(
   settings: Settings | null,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean,
-  hooksEnabled: boolean
+  hooksEnabled: boolean,
+  ssoConfigurationEnabled: boolean
 ): SidebarItemEntry[] {
   const items: SidebarItemEntry[] = [];
 
@@ -164,8 +166,7 @@ function buildItems(
   if (!isCurator) {
     addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
-    // SSO provider config is not supported on multi-tenant cloud.
-    if (!enableCloud) {
+    if (!enableCloud || ssoConfigurationEnabled) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
     }
     if (hasSubscription) {
@@ -216,6 +217,7 @@ export default function AdminSidebar() {
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettings();
+  const { authTypeMetadata } = useAuthTypeMetadata();
   const tier = settings?.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();
@@ -241,7 +243,8 @@ export default function AdminSidebar() {
     settings,
     customAnalyticsEnabled,
     hasSubscriptionOrLicense,
-    hooksEnabled
+    hooksEnabled,
+    authTypeMetadata?.ssoConfigurationEnabled ?? false
   );
 
   const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);

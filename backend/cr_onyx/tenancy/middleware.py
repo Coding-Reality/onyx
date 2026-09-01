@@ -64,6 +64,9 @@ class TenantContextMiddleware:
 
         context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         scope.setdefault("state", {})["tenant_id"] = tenant_id
+        # This is safe to reuse for redirects: ``host`` came from the
+        # operator-owned map above, never from an unverified client value.
+        scope["state"]["tenant_host"] = host
         try:
             await self.app(scope, receive, send)
         finally:

@@ -5,7 +5,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import SSOProvider, User
@@ -24,17 +23,21 @@ from onyx.server.manage.sso.models import (
     SSOProviderResponse,
     SSOProviderUpdateRequest,
 )
+from onyx.server.manage.sso.policy import (
+    sso_configuration_enabled,
+    sso_provider_type_allowed,
+    sso_web_domain,
+)
 from onyx.server.security.store import (
     load_effective_uncached,
     security_settings_write_lock,
 )
 from onyx.utils.encryption import reject_masked_credentials, restore_masked_credentials
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from shared_configs.configs import MULTI_TENANT
 
 
 def _reject_if_multi_tenant() -> None:
-    if MULTI_TENANT:
+    if not sso_configuration_enabled():
         raise OnyxError(
             OnyxErrorCode.SINGLE_TENANT_ONLY,
             "SSO provider configuration is not available on this deployment.",
@@ -75,9 +78,10 @@ def _fetch_sso_provider_or_raise(db_session: Session, provider_id: int) -> SSOPr
 def list_sso_providers(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
+    web_domain: str = Depends(sso_web_domain),
 ) -> list[SSOProviderResponse]:
     return [
-        SSOProviderResponse.from_model(provider, WEB_DOMAIN)
+        SSOProviderResponse.from_model(provider, web_domain)
         for provider in fetch_sso_providers(db_session, enabled_only=False)
     ]
 
@@ -87,7 +91,13 @@ def create_sso_provider_endpoint(
     request: SSOProviderCreateRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
+    web_domain: str = Depends(sso_web_domain),
 ) -> SSOProviderResponse:
+    if not sso_provider_type_allowed(request.provider_type):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This SSO provider type is not enabled for multi-tenant Community Edition.",
+        )
     # New providers are created enabled, so an existing enabled provider
     # makes this a multi-SSO create.
     _require_business_tier_for_additional_enabled_provider(db_session)
@@ -112,7 +122,7 @@ def create_sso_provider_endpoint(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
     invalidate_sso_provider_options_cache()
-    return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
+    return SSOProviderResponse.from_model(provider, web_domain)
 
 
 @admin_router.patch("/provider/{provider_id}")
@@ -121,8 +131,14 @@ def update_sso_provider_endpoint(
     request: SSOProviderUpdateRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
+    web_domain: str = Depends(sso_web_domain),
 ) -> SSOProviderResponse:
     provider = _fetch_sso_provider_or_raise(db_session, provider_id)
+    if not sso_provider_type_allowed(provider.provider_type):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This SSO provider type is not enabled for multi-tenant Community Edition.",
+        )
 
     try:
         merged_config: dict[str, Any] | None = None
@@ -149,7 +165,7 @@ def update_sso_provider_endpoint(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
     invalidate_sso_provider_options_cache()
-    return SSOProviderResponse.from_model(updated_provider, WEB_DOMAIN)
+    return SSOProviderResponse.from_model(updated_provider, web_domain)
 
 
 @admin_router.post("/provider/{provider_id}/enabled")
@@ -158,8 +174,16 @@ def set_sso_provider_enabled_endpoint(
     request: SSOProviderEnabledRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
+    web_domain: str = Depends(sso_web_domain),
 ) -> SSOProviderResponse:
-    _fetch_sso_provider_or_raise(db_session, provider_id)
+    existing_provider = _fetch_sso_provider_or_raise(db_session, provider_id)
+    if request.enabled and not sso_provider_type_allowed(
+        existing_provider.provider_type
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This SSO provider type is not enabled for multi-tenant Community Edition.",
+        )
     if request.enabled:
         _require_business_tier_for_additional_enabled_provider(
             db_session, exclude_provider_id=provider_id
@@ -188,4 +212,4 @@ def set_sso_provider_enabled_endpoint(
             )
 
     invalidate_sso_provider_options_cache()
-    return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
+    return SSOProviderResponse.from_model(provider, web_domain)

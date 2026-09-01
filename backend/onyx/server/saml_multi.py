@@ -23,6 +23,7 @@ from onyx.db.sso_provider import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.sso.policy import sso_provider_type_allowed
 from onyx.server.saml import (
     EMAIL_ATTRIBUTE_KEYS,
     EMAIL_ATTRIBUTE_KEYS_LOWER,
@@ -112,6 +113,8 @@ def _resolve_saml_provider(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown SAML provider")
     if provider.provider_type is not SSOProviderType.SAML:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown SAML provider")
+    if not sso_provider_type_allowed(provider.provider_type):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown SAML provider")
     if provider.config is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown SAML provider")
 
@@ -126,6 +129,8 @@ def _resolve_saml_provider_by_issuer(
     db_session: Session, issuer: str
 ) -> tuple[SSOProvider, SAMLProviderConfig]:
     for provider in fetch_sso_providers(db_session=db_session, enabled_only=True):
+        if not sso_provider_type_allowed(provider.provider_type):
+            continue
         if (
             provider.provider_type is not SSOProviderType.SAML
             or provider.config is None

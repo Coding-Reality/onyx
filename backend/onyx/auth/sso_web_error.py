@@ -25,6 +25,7 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
+from onyx.server.manage.sso.policy import sso_web_domain
 
 _COOKIE_SECURE = WEB_DOMAIN.startswith("https")
 
@@ -71,7 +72,7 @@ def redirect_sso_errors_to_web(
                     detail.value if isinstance(detail, enum.Enum) else str(detail)
                 )
                 response: Response = RedirectResponse(
-                    f"{WEB_DOMAIN}/auth/error?error={quote(detail_str)}",
+                    f"{sso_web_domain(request)}/auth/error?error={quote(detail_str)}",
                     status_code=302,
                 )
             else:

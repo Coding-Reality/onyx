@@ -19,6 +19,7 @@ from onyx.db.engine.async_sql_engine import (
 )
 from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.utils.variable_functionality import (
+    fetch_ce_extension_implementation_with_fallback,
     fetch_versioned_implementation_with_fallback,
 )
 
@@ -101,6 +102,15 @@ class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
         self,
         create_dict: Dict[str, Any],
     ) -> UP:
+        extension_role = fetch_ce_extension_implementation_with_fallback(
+            "onyx.db.user_tenant_mapping", "get_new_user_role", lambda _email: None
+        )(create_dict["email"])
+        if extension_role is not None:
+            create_dict["role"] = (
+                UserRole.ADMIN if extension_role == "admin" else UserRole.BASIC
+            )
+            return await super().create(create_dict)
+
         user_count = await get_user_count()
         if user_count == 0 or create_dict["email"] in get_default_admin_user_emails():
             create_dict["role"] = UserRole.ADMIN

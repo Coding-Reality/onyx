@@ -16,7 +16,10 @@ from onyx.configs.constants import (
     STABLE_VERSION_PATTERN,
 )
 from onyx.db.auth import get_user_count
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import (
+    get_session_with_shared_schema,
+    get_session_with_tenant,
+)
 from onyx.db.enums import SSOProviderType
 from onyx.db.sso_provider import fetch_sso_providers
 from onyx.server.manage.models import (
@@ -26,9 +29,11 @@ from onyx.server.manage.models import (
     SSOProviderOption,
     VersionResponse,
 )
+from onyx.server.manage.sso.policy import sso_configuration_enabled
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
 
@@ -45,9 +50,9 @@ _SSO_AUTHORIZE_ROUTER = {
 # Admin mutations invalidate this pod directly. Other pods ride the TTL.
 _SSO_OPTIONS_TTL_SECONDS = 60
 _SSO_OPTIONS_CACHE: TTLCache[str, list[SSOProviderOption]] = TTLCache(
-    maxsize=1, ttl=_SSO_OPTIONS_TTL_SECONDS
+    maxsize=512, ttl=_SSO_OPTIONS_TTL_SECONDS
 )
-_SSO_OPTIONS_KEY = "options"
+_SINGLE_TENANT_SSO_OPTIONS_KEY = "single-tenant"
 _SSO_OPTIONS_LOCK = threading.Lock()
 
 # Login-page traffic must not COUNT users on every request. Users are never
@@ -59,21 +64,28 @@ _HAS_USERS_LATCHED = False
 def invalidate_sso_provider_options_cache() -> None:
     """Call after any sso_provider mutation so admin edits show immediately."""
     with _SSO_OPTIONS_LOCK:
-        _SSO_OPTIONS_CACHE.pop(_SSO_OPTIONS_KEY, None)
+        # Mutations are rare. Clearing every tenant avoids leaving stale login
+        # options on another API pod or after tenant context changes in tests.
+        _SSO_OPTIONS_CACHE.clear()
 
 
 def _fetch_sso_provider_options() -> list[SSOProviderOption]:
-    # Single-tenant only. /auth/type runs before any tenant context, so a
-    # multi-tenant lookup has no tenant to key on.
-    if MULTI_TENANT:
+    if not sso_configuration_enabled():
         return []
+    tenant_id = get_current_tenant_id() if MULTI_TENANT else None
+    cache_key = tenant_id or _SINGLE_TENANT_SSO_OPTIONS_KEY
     # The lock spans the DB read so a mutation's invalidate cannot land between
     # read and cache write, which would pin a pre-mutation snapshot for a TTL.
     with _SSO_OPTIONS_LOCK:
-        cached = _SSO_OPTIONS_CACHE.get(_SSO_OPTIONS_KEY)
+        cached = _SSO_OPTIONS_CACHE.get(cache_key)
         if cached is not None:
             return cached
-        with get_session_with_shared_schema() as db_session:
+        session_context = (
+            get_session_with_tenant(tenant_id=tenant_id)
+            if tenant_id is not None
+            else get_session_with_shared_schema()
+        )
+        with session_context as db_session:
             options = [
                 SSOProviderOption(
                     name=provider.name,
@@ -86,7 +98,7 @@ def _fetch_sso_provider_options() -> list[SSOProviderOption]:
                 )
                 for provider in fetch_sso_providers(db_session, enabled_only=True)
             ]
-        _SSO_OPTIONS_CACHE[_SSO_OPTIONS_KEY] = options
+        _SSO_OPTIONS_CACHE[cache_key] = options
         return options
 
 
@@ -97,9 +109,9 @@ async def healthcheck() -> StatusResponse:
 
 @router.get("/auth/type", tags=PUBLIC_API_TAGS)
 async def get_auth_type(response: Response) -> AuthConfigResponse:
-    # NOTE: This endpoint is critical for the multi-tenant flow and is hit before there is a tenant context
-    # The reason is this is used during the login flow, but we don't know which tenant the user is supposed to be
-    # associated with until they auth.
+    # The CR Community extension resolves tenant context from an operator-owned
+    # hostname mapping before this endpoint runs. Deployments without that
+    # policy return no multi-tenant SSO options.
     global _HAS_USERS_LATCHED
     has_users = True
     if not MULTI_TENANT and not _HAS_USERS_LATCHED:
@@ -132,6 +144,7 @@ async def get_auth_type(response: Response) -> AuthConfigResponse:
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
         password_auth_enabled=security.password_auth_enabled,
+        sso_configuration_enabled=sso_configuration_enabled(),
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
     )
 

@@ -25,6 +25,7 @@ from onyx.db.models import SSOProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.server.manage.sso.api import admin_router
+from onyx.server.manage.sso.policy import sso_web_domain
 from onyx.utils.encryption import is_masked_credential
 
 
@@ -46,6 +47,9 @@ def client(
         yield db_session
 
     app.dependency_overrides[get_session] = override_get_session
+    # This focused router test does not install the production tenant-host
+    # middleware. Supply the same trusted origin its dependency would resolve.
+    app.dependency_overrides[sso_web_domain] = lambda: WEB_DOMAIN
 
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
@@ -135,7 +139,7 @@ def test_sso_provider_crud_masks_and_restores_secrets(
         "/admin/sso/provider",
         json=_build_oidc_request(name, original_secret),
     )
-    assert create_response.status_code == 200
+    assert create_response.status_code == 200, create_response.text
     created_provider = create_response.json()
     assert created_provider["name"] == name
     assert created_provider["display_name"] == "Company A"
@@ -242,7 +246,7 @@ def test_update_partial_config_preserves_stored_keys(
         "/admin/sso/provider",
         json=_build_oidc_request(name, "super-secret-value"),
     )
-    assert create_response.status_code == 200
+    assert create_response.status_code == 200, create_response.text
     provider_names.append(name)
     provider_id = create_response.json()["id"]
     masked_secret = create_response.json()["config"]["client_secret"]
@@ -546,8 +550,10 @@ def test_second_enabled_provider_requires_business_tier(
         )
 
 
-@patch("onyx.server.manage.sso.api.MULTI_TENANT", True)
-def test_multi_tenant_deployments_are_rejected(client: TestClient) -> None:
+@patch("onyx.server.manage.sso.api.sso_configuration_enabled", return_value=False)
+def test_multi_tenant_deployments_without_ce_policy_are_rejected(
+    _policy: Any, client: TestClient
+) -> None:
     """The gate sits on the router, so no handler below it is reachable."""
     for response in (
         client.get("/admin/sso/provider"),
