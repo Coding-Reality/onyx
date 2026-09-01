@@ -43,7 +43,13 @@ class TenantContextMiddleware:
             key.decode("latin-1").lower(): value.decode("latin-1")
             for key, value in scope.get("headers", [])
         }
-        host = headers.get("host", "").split(":", 1)[0].lower().rstrip(".")
+        # The public nginx proxy overwrites X-Forwarded-Host with the external
+        # host, and the Next.js server propagates that same value for its
+        # server-side API fetches. Resolve only through the operator-owned map;
+        # an unknown or forged hostname still fails closed.
+        forwarded_host = headers.get("x-forwarded-host", "").split(",", 1)[0]
+        host = forwarded_host or headers.get("host", "")
+        host = host.split(":", 1)[0].lower().rstrip(".")
         tenant_id = self.tenant_host_map.get(host)
         if tenant_id is None:
             await self._reject(send, 421, "Unmapped tenant host")

@@ -74,6 +74,7 @@ export async function fetchSS(url: string, options?: RequestInit) {
   // host is not mapped and never trusts a caller-supplied tenant ID.
   if (originalHost) {
     requestHeaders.set("host", originalHost);
+    requestHeaders.set("x-forwarded-host", originalHost);
   }
 
   const init: RequestInit = {

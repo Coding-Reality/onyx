@@ -20,6 +20,7 @@ async def _request(
     middleware: TenantContextMiddleware,
     host: str,
     authorization: str | None = None,
+    forwarded_host: str | None = None,
 ) -> tuple[int, str | None]:
     observed_tenant: str | None = None
     response_status = 0
@@ -39,6 +40,8 @@ async def _request(
             response_status = int(message["status"])
 
     headers = [(b"host", host.encode())]
+    if forwarded_host:
+        headers.append((b"x-forwarded-host", forwarded_host.encode()))
     if authorization:
         headers.append((b"authorization", authorization.encode()))
     scope = {"type": "http", "method": "GET", "path": "/api/chat", "headers": headers}
@@ -61,6 +64,30 @@ async def test_host_mapping_sets_and_clears_tenant_context() -> None:
 async def test_unmapped_host_fails_closed() -> None:
     middleware = TenantContextMiddleware(lambda: None, {"a.example.com": TENANT_A})
     status, observed_tenant = await _request(middleware, "unknown.example.com")
+    assert status == 421
+    assert observed_tenant is None
+
+
+@pytest.mark.asyncio
+async def test_forwarded_external_host_resolves_server_side_request() -> None:
+    middleware = TenantContextMiddleware(lambda: None, {"a.example.com": TENANT_A})
+    status, observed_tenant = await _request(
+        middleware,
+        "onyx-api-service",
+        forwarded_host="a.example.com",
+    )
+    assert status == 200
+    assert observed_tenant == TENANT_A
+
+
+@pytest.mark.asyncio
+async def test_unmapped_forwarded_host_fails_closed() -> None:
+    middleware = TenantContextMiddleware(lambda: None, {"a.example.com": TENANT_A})
+    status, observed_tenant = await _request(
+        middleware,
+        "a.example.com",
+        forwarded_host="unknown.example.com",
+    )
     assert status == 421
     assert observed_tenant is None
 
