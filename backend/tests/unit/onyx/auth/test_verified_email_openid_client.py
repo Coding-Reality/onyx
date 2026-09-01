@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from httpx_oauth.exceptions import GetIdEmailError
-from httpx_oauth.oauth2 import GetAccessTokenError
+from httpx_oauth.oauth2 import GetAccessTokenError, OAuth2ClientAuthMethod
 
 from onyx.auth.oidc_client import (
     OpenIDConfigurationIssuerMismatch,
@@ -37,6 +37,7 @@ def _build_client(
     discovery: dict[str, Any],
     config_url: str = _CONFIG_URL,
     require_verified_email: bool = False,
+    token_endpoint_auth_method: OAuth2ClientAuthMethod | None = None,
 ) -> VerifiedEmailOpenID:
     discovery_response = MagicMock()
     discovery_response.json.return_value = discovery
@@ -50,6 +51,26 @@ def _build_client(
             "csecret",
             config_url,
             require_verified_email=require_verified_email,
+            token_endpoint_auth_method=token_endpoint_auth_method,
+        )
+
+
+def test_explicit_token_endpoint_auth_method_overrides_discovery_order() -> None:
+    discovery = _discovery()
+    discovery["token_endpoint_auth_methods_supported"] = [
+        "client_secret_basic",
+        "client_secret_post",
+    ]
+    client = _build_client(
+        discovery, token_endpoint_auth_method="client_secret_post"
+    )
+    assert client.token_endpoint_auth_method == "client_secret_post"
+
+
+def test_unadvertised_token_endpoint_auth_method_rejected() -> None:
+    with pytest.raises(ValueError, match="not advertised"):
+        _build_client(
+            _discovery(), token_endpoint_auth_method="client_secret_post"
         )
 
 

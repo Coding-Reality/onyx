@@ -9,7 +9,7 @@ from urllib.parse import unquote, urlsplit
 import httpx
 from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 from httpx_oauth.exceptions import GetIdEmailError
-from httpx_oauth.oauth2 import GetAccessTokenError
+from httpx_oauth.oauth2 import GetAccessTokenError, OAuth2ClientAuthMethod
 
 from onyx.utils.logger import format_error_for_logging, setup_logger
 
@@ -121,6 +121,7 @@ class VerifiedEmailOpenID(OpenID):
         name: str = "openid",
         base_scopes: list[str] | None = BASE_SCOPES,
         require_verified_email: bool = False,
+        token_endpoint_auth_method: OAuth2ClientAuthMethod | None = None,
     ):
         super().__init__(
             client_id,
@@ -130,6 +131,16 @@ class VerifiedEmailOpenID(OpenID):
             base_scopes=base_scopes,
         )
         self.require_verified_email = require_verified_email
+        if token_endpoint_auth_method is not None:
+            advertised_methods = self.openid_configuration.get(
+                "token_endpoint_auth_methods_supported", []
+            )
+            if token_endpoint_auth_method not in advertised_methods:
+                raise ValueError(
+                    "configured token endpoint authentication method is not "
+                    "advertised by the provider"
+                )
+            self.token_endpoint_auth_method = token_endpoint_auth_method
         validate_issuer_owns_config_url(
             self.openid_configuration.get("issuer"), openid_configuration_endpoint
         )

@@ -2,7 +2,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
@@ -50,6 +50,13 @@ class GoogleProviderConfig(_OAuth2ProviderConfig):
 
 class OIDCProviderConfig(_OAuth2ProviderConfig):
     openid_config_url: str
+    # Discovery documents list supported methods, not an interoperable
+    # preference order. Allow an operator to select the method the registered
+    # client actually accepts instead of blindly using the first advertised
+    # value.
+    token_endpoint_auth_method: Literal[
+        "client_secret_basic", "client_secret_post"
+    ] | None = None
     # Strict opt-in: reject sign-ins when userinfo omits the optional
     # email_verified claim (some IdPs, e.g. Microsoft Entra ID, omit it).
     # Any present value other than true is rejected regardless.

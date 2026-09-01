@@ -56,6 +56,7 @@ def test_resolve_oidc_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
         "require_verified_email": False,
         "pkce_enabled": False,
         "scopes": [],
+        "token_endpoint_auth_method": None,
     }
 
 
@@ -136,6 +137,23 @@ def test_build_client_oidc_uses_provider_name(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(oidc_multi, "VerifiedEmailOpenID", _fake_openid)
     client = oidc_multi._build_client(_provider(name="okta"), dict(_OIDC_CONFIG))
     assert client.name == "okta"
+
+
+def test_build_client_oidc_passes_explicit_token_auth_method(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_openid(*_args: Any, **kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return SimpleNamespace(name=kwargs["name"])
+
+    monkeypatch.setattr(oidc_multi, "VerifiedEmailOpenID", _fake_openid)
+    oidc_multi._build_client(
+        _provider(),
+        {**_OIDC_CONFIG, "token_endpoint_auth_method": "client_secret_post"},
+    )
+    assert captured["token_endpoint_auth_method"] == "client_secret_post"
 
 
 def _openid_stub_with_discovery(scopes_supported: list[str] | None) -> Any:
