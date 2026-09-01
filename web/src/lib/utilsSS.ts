@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { HOST_URL, INTERNAL_URL } from "./constants";
 import { processCookies } from "@/lib/users/svcSS";
 
@@ -59,15 +59,28 @@ export class UrlBuilder {
 
 export async function fetchSS(url: string, options?: RequestInit) {
   const cookieString = processCookies(await cookies());
+  const incomingHeaders = await headers();
+  const originalHost = (
+    incomingHeaders.get("x-forwarded-host") ?? incomingHeaders.get("host")
+  )
+    ?.split(",", 1)[0]
+    ?.trim();
+  const requestHeaders = new Headers(options?.headers);
+  requestHeaders.set("cookie", cookieString);
+
+  // INTERNAL_URL points at the Kubernetes service, but tenancy is resolved
+  // from an operator-owned external host map. Preserve the original request
+  // host for server-side API calls; the backend still fails closed when that
+  // host is not mapped and never trusts a caller-supplied tenant ID.
+  if (originalHost) {
+    requestHeaders.set("host", originalHost);
+  }
 
   const init: RequestInit = {
     credentials: "include",
     cache: "no-store",
     ...options,
-    headers: {
-      ...options?.headers,
-      cookie: cookieString,
-    },
+    headers: requestHeaders,
   };
 
   return fetch(buildUrl(url), init);
