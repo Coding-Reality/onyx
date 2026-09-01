@@ -100,6 +100,20 @@ def test_update_preserves_basic_key_permissions(db_session: Session) -> None:
     remove_api_key(db_session, descriptor.api_key_id)
 
 
+def test_curator_key_receives_baseline_permissions(db_session: Session) -> None:
+    descriptor = insert_api_key(
+        db_session,
+        APIKeyArgs(name="curator-ingestion", role=UserRole.CURATOR),
+        user_id=None,
+    )
+    user = _get_key_user(db_session, descriptor.user_id)
+
+    assert user.effective_permissions
+    assert user.role == UserRole.CURATOR
+
+    remove_api_key(db_session, descriptor.api_key_id)
+
+
 def test_update_role_change_swaps_permission_source(db_session: Session) -> None:
     descriptor = insert_api_key(
         db_session, APIKeyArgs(name="role-swap", role=UserRole.BASIC), user_id=None

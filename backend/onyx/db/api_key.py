@@ -144,8 +144,15 @@ def insert_api_key(
 
     # Assign the API key virtual user to the appropriate default group
     # before commit so everything is atomic.
-    # Only ADMIN and BASIC roles get default group membership.
-    if api_key_args.role in (UserRole.ADMIN, UserRole.BASIC):
+    # Curator service accounts need baseline permissions in addition to their
+    # role; without group membership they are treated as LIMITED and cannot
+    # use the ingestion API they were created for.
+    if api_key_args.role in (
+        UserRole.ADMIN,
+        UserRole.BASIC,
+        UserRole.CURATOR,
+        UserRole.GLOBAL_CURATOR,
+    ):
         assign_user_to_default_groups__no_commit(
             db_session,
             api_key_user_row,
@@ -200,7 +207,12 @@ def update_api_key(
         db_session.execute(delete_stmt)
 
         # Re-assign to the correct default group (only for ADMIN/BASIC).
-        if api_key_args.role in (UserRole.ADMIN, UserRole.BASIC):
+        if api_key_args.role in (
+            UserRole.ADMIN,
+            UserRole.BASIC,
+            UserRole.CURATOR,
+            UserRole.GLOBAL_CURATOR,
+        ):
             assign_user_to_default_groups__no_commit(
                 db_session,
                 api_key_user,
