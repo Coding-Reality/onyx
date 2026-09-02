@@ -31,7 +31,13 @@ def test_redmine_binding_update_is_audited() -> None:
         "configuration": {"existing": True},
     }
     session = MagicMock()
-    session.execute.side_effect = [tenant_result, MagicMock(), MagicMock(), MagicMock()]
+    session.execute.side_effect = [
+        MagicMock(),
+        tenant_result,
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    ]
     context = MagicMock()
     context.__enter__.return_value = session
     binding = RedmineTenantBinding(
@@ -44,13 +50,14 @@ def test_redmine_binding_update_is_audited() -> None:
     with patch("cr_onyx.db.control_plane.get_catalog_session", return_value=context):
         set_redmine_tenant_binding("coding-reality", binding, "gitops/post-sync")
 
-    assert session.execute.call_count == 4
+    assert session.execute.call_count == 5
     executed_sql = "\n".join(
         str(call.args[0]) for call in session.execute.call_args_list
     )
     assert "UPDATE public.cr_tenant" in executed_sql
     assert "INSERT INTO public.cr_tenant_audit" in executed_sql
-    update_parameters = session.execute.call_args_list[2].args[1]
+    assert "pg_advisory_xact_lock" in executed_sql
+    update_parameters = session.execute.call_args_list[3].args[1]
     assert '"existing": true' in update_parameters["configuration"]
     assert '"enabled": false' in update_parameters["configuration"]
     session.commit.assert_called_once()

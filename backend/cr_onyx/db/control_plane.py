@@ -117,6 +117,10 @@ def set_redmine_tenant_binding(
         raise ValueError("Binding actor is required")
 
     with get_catalog_session() as session:
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": f"cr_redmine_binding:{slug.strip()}"},
+        )
         tenant = (
             session.execute(
                 text(
