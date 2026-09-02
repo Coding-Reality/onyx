@@ -8,6 +8,7 @@ from cr_onyx.db.control_plane import (
     set_redmine_tenant_binding,
 )
 from cr_onyx.tenancy.integrations import RedmineTenantBinding
+from scripts.cr_tenant_control import _parser
 
 
 def test_schema_name_for_tenant_is_upstream_compatible() -> None:
@@ -111,3 +112,28 @@ def test_redmine_identity_snapshot_rejects_ambiguous_mapping() -> None:
             [(9, "member@example.com"), (10, "member@example.com")],
             "revenueos/identity-sync",
         )
+
+
+def test_redmine_binding_cli_defaults_to_disabled() -> None:
+    args = _parser().parse_args(
+        [
+            "set-redmine-binding",
+            "--slug",
+            "coding-reality",
+            "--revenueos-tenant-id",
+            "tenant-coding-reality",
+            "--base-url",
+            "https://redmine.cloud.coding-reality.com",
+            "--root-project-id",
+            "1",
+            "--redmine-group-id",
+            "6",
+            "--actor",
+            "gitops/post-sync",
+        ]
+    )
+
+    assert args.command == "set-redmine-binding"
+    assert args.root_project_id == 1
+    assert args.redmine_group_id == 6
+    assert args.enabled is False

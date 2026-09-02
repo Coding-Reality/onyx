@@ -9,9 +9,11 @@ from cr_onyx.db.control_plane import (
     apply_control_plane_migration,
     create_tenant,
     remove_tenant_user,
+    set_redmine_tenant_binding,
     set_tenant_status,
     tenant_host_map,
 )
+from cr_onyx.tenancy.integrations import RedmineTenantBinding
 
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
@@ -81,6 +83,15 @@ def _parser() -> argparse.ArgumentParser:
     remove_user_parser.add_argument("--slug", required=True)
     remove_user_parser.add_argument("--email", required=True)
 
+    redmine_parser = subparsers.add_parser("set-redmine-binding")
+    redmine_parser.add_argument("--slug", required=True)
+    redmine_parser.add_argument("--revenueos-tenant-id", required=True)
+    redmine_parser.add_argument("--base-url", required=True)
+    redmine_parser.add_argument("--root-project-id", required=True, type=int)
+    redmine_parser.add_argument("--redmine-group-id", required=True, type=int)
+    redmine_parser.add_argument("--actor", required=True)
+    redmine_parser.add_argument("--enabled", action="store_true")
+
     subparsers.add_parser("host-map")
     return parser
 
@@ -113,6 +124,19 @@ def main() -> None:
         return
     if args.command == "remove-user":
         remove_tenant_user(args.slug, args.email)
+        return
+    if args.command == "set-redmine-binding":
+        set_redmine_tenant_binding(
+            args.slug,
+            RedmineTenantBinding(
+                revenueos_tenant_id=args.revenueos_tenant_id,
+                base_url=args.base_url,
+                root_project_id=args.root_project_id,
+                redmine_group_id=args.redmine_group_id,
+                enabled=args.enabled,
+            ),
+            args.actor,
+        )
         return
     if args.command == "host-map":
         print(json.dumps(tenant_host_map(), sort_keys=True))
