@@ -269,6 +269,44 @@ def test_slim_enumeration_includes_enabled_attachment_ids() -> None:
     assert attachment_document_id(9) in slim_ids
 
 
+def test_wiki_rename_reconciles_as_delete_and_create() -> None:
+    connector = configured_connector(include_attachments=True)
+    fake_client = connector._client
+    assert isinstance(fake_client, FakeRedmineClient)
+    old_id = wiki_page_id(2, "Child")
+    renamed_page = fake_client.pages.pop("Child")
+    renamed_page.title = "Renamed"
+    fake_client.pages["Renamed"] = renamed_page
+    fake_client.summaries["project-a"][1] = RedmineWikiPageSummary(
+        title="Renamed",
+        parent_title="Parent",
+        version=renamed_page.version,
+        created_on=renamed_page.created_on,
+        updated_on=renamed_page.updated_on,
+    )
+
+    items = [item for batch in connector.retrieve_all_slim_docs() for item in batch]
+    document_ids = {item.id for item in items if isinstance(item, SlimDocument)}
+    renamed_values, _ = drain_checkpoint(
+        connector.load_from_checkpoint(
+            NOW.timestamp() - 60,
+            NOW.timestamp() + 60,
+            RedmineCheckpoint(has_more=True, project_index=1, page_offset=1),
+        )
+    )
+    renamed_node = next(
+        item
+        for item in renamed_values
+        if isinstance(item, HierarchyNode)
+        and item.raw_node_id == wiki_page_id(2, "Renamed")
+    )
+
+    assert old_id not in document_ids
+    assert wiki_page_id(2, "Renamed") in document_ids
+    assert attachment_document_id(9) in document_ids
+    assert renamed_node.raw_parent_id == wiki_page_id(2, "Parent")
+
+
 def test_permission_sync_applies_fail_closed_acl_to_docs_nodes_and_slim() -> None:
     connector = configured_connector()
     access = ExternalAccess(

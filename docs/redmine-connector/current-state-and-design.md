@@ -47,7 +47,7 @@ Attachments and permission synchronization are enabled; Issues remain disabled.
   hierarchy node, attachment document, and both unique OpenSearch canaries.
 - The recurring identity schedule completed successfully on the isolated
   `revenueos-identity` worker tag with overlap disabled.
-- The focused final suite passed 42 Python tests, 13 Windmill projection
+- The focused final suite passed 43 Python tests, 13 Windmill projection
   assertions, Ruff, and ty.
 
 ## Evidence labels
