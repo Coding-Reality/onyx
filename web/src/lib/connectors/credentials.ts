@@ -63,6 +63,10 @@ export interface LumAppsCredentialJson {
   lumapps_service_user: string;
 }
 
+export interface RedmineCredentialJson {
+  redmine_api_key: string;
+}
+
 export interface BitbucketCredentialJson {
   bitbucket_email: string;
   bitbucket_api_token: string;
@@ -314,6 +318,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     lumapps_api_key: "",
     lumapps_service_user: "",
   } as LumAppsCredentialJson,
+  redmine: {
+    redmine_api_key: "",
+  } as RedmineCredentialJson,
   bitbucket: {
     bitbucket_email: "",
     bitbucket_api_token: "",
@@ -538,6 +545,7 @@ export const credentialDisplayNames: Record<string, string> = {
   lumapps_application_id: "LumApps Application ID",
   lumapps_api_key: "LumApps API Key",
   lumapps_service_user: "Service User Email (to index on behalf of)",
+  redmine_api_key: "Redmine API Key",
 
   // Gitlab
   gitlab_url: "GitLab URL",

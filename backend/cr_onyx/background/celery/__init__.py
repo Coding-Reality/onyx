@@ -1,1 +1,1 @@
-"""Coding Reality Community Edition Celery extensions."""
+"""Coding Reality Celery extensions."""

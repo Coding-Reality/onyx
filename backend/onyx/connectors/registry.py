@@ -228,6 +228,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.lumapps.connector",
         class_name="LumAppsConnector",
     ),
+    DocumentSource.REDMINE: ConnectorMapping(
+        module_path="onyx.connectors.redmine.connector",
+        class_name="RedmineConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",

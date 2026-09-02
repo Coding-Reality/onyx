@@ -296,6 +296,7 @@ class DocumentSource(str, Enum):
     TESTRAIL = "testrail"
     BRAINTRUST = "braintrust"
     LUMAPPS = "lumapps"
+    REDMINE = "redmine"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -618,6 +619,7 @@ class OnyxCeleryTask:
     CHECK_FOR_HIERARCHY_FETCHING = "check_for_hierarchy_fetching"
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
+    REDMINE_PERMISSION_RECONCILIATION = "redmine_permission_reconciliation"
     CHECK_FOR_AUTO_LLM_UPDATE = "check_for_auto_llm_update"
 
     # User file processing
@@ -799,4 +801,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.TESTRAIL: "Test cases and QA management",
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
     DocumentSource.LUMAPPS: "Intranet pages, news, and content",
+    DocumentSource.REDMINE: "Project Wiki pages and attachments",
 }

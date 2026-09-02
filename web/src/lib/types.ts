@@ -639,6 +639,7 @@ export enum ValidSources {
   TestRail = "testrail",
   Braintrust = "braintrust",
   Lumapps = "lumapps",
+  Redmine = "redmine",
   Canvas = "canvas",
 
   // Craft-specific sources

@@ -26,6 +26,7 @@ from onyx.db.models import (
 )
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.variable_functionality import (
+    fetch_ce_extension_implementation_with_fallback,
     fetch_ee_implementation_or_noop,
     fetch_versioned_implementation,
 )
@@ -143,6 +144,13 @@ def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
 
 
 def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:
+    ce_extension_check = fetch_ce_extension_implementation_with_fallback(
+        "onyx.external_permissions.sync_params",
+        "source_should_fetch_permissions_during_indexing",
+        None,
+    )
+    if ce_extension_check is not None:
+        return bool(ce_extension_check(source))
     _source_should_fetch_permissions_during_indexing_func = cast(
         Callable[[DocumentSource], bool],
         fetch_ee_implementation_or_noop(

@@ -1,1 +1,1 @@
-"""Coding Reality Community Edition Celery task extensions."""
+"""Coding Reality Celery task packages."""

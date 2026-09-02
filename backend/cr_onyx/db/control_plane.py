@@ -1,11 +1,13 @@
 import json
 import uuid
 from collections.abc import Sequence
+from copy import deepcopy
 from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.schema import CreateSchema
 
+from cr_onyx.tenancy.integrations import RedmineTenantBinding
 from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.engine.tenant_utils import validate_tenant_id
 
@@ -101,6 +103,174 @@ def set_tenant_status(slug: str, status: str) -> None:
         ).scalar_one_or_none()
         if updated is None:
             raise ValueError("Tenant does not exist")
+        session.commit()
+
+
+def set_redmine_tenant_binding(
+    slug: str,
+    binding: RedmineTenantBinding,
+    actor: str,
+) -> None:
+    """Install an audited RevenueOS projection without storing credentials."""
+    normalized_actor = actor.strip()
+    if not normalized_actor:
+        raise ValueError("Binding actor is required")
+
+    with get_catalog_session() as session:
+        tenant = (
+            session.execute(
+                text(
+                    """
+                    SELECT id, configuration
+                    FROM public.cr_tenant
+                    WHERE slug = :slug
+                    FOR UPDATE
+                    """
+                ),
+                {"slug": slug.strip()},
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if tenant is None:
+            raise ValueError("Tenant does not exist")
+
+        configuration = deepcopy(tenant["configuration"] or {})
+        if not isinstance(configuration, dict):
+            raise ValueError("Tenant configuration is invalid")
+        integrations = configuration.setdefault("integrations", {})
+        if not isinstance(integrations, dict):
+            raise ValueError("Tenant integration configuration is invalid")
+        binding_json = binding.model_dump(mode="json")
+        integrations["redmine"] = binding_json
+
+        _set_rls_tenant(session, tenant["id"])
+        session.execute(
+            text(
+                """
+                UPDATE public.cr_tenant
+                SET configuration = CAST(:configuration AS jsonb)
+                WHERE id = :tenant_id
+                """
+            ),
+            {
+                "tenant_id": str(tenant["id"]),
+                "configuration": json.dumps(configuration),
+            },
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO public.cr_tenant_audit
+                    (tenant_id, actor, action, target, detail)
+                VALUES
+                    (:tenant_id, :actor, 'set_redmine_binding', 'redmine',
+                     CAST(:detail AS jsonb))
+                """
+            ),
+            {
+                "tenant_id": str(tenant["id"]),
+                "actor": normalized_actor,
+                "detail": json.dumps(binding_json),
+            },
+        )
+        session.commit()
+
+
+def replace_redmine_identity_snapshot(
+    slug: str,
+    redmine_group_id: int,
+    identities: Sequence[tuple[int, str]],
+    actor: str,
+) -> None:
+    """Atomically replace the explicit Redmine-to-Onyx identity intersection."""
+    normalized_actor = actor.strip()
+    if not normalized_actor:
+        raise ValueError("Identity snapshot actor is required")
+    if redmine_group_id <= 0:
+        raise ValueError("Redmine group ID must be positive")
+
+    normalized: list[tuple[int, str]] = []
+    seen_user_ids: set[int] = set()
+    seen_emails: set[str] = set()
+    for redmine_user_id, email in identities:
+        normalized_email = email.strip().lower()
+        if redmine_user_id <= 0 or "@" not in normalized_email:
+            raise ValueError("Each Redmine identity requires a valid ID and email")
+        if redmine_user_id in seen_user_ids or normalized_email in seen_emails:
+            raise ValueError("Redmine identity snapshot contains duplicates")
+        seen_user_ids.add(redmine_user_id)
+        seen_emails.add(normalized_email)
+        normalized.append((redmine_user_id, normalized_email))
+
+    with get_catalog_session() as session:
+        tenant_id = session.execute(
+            text("SELECT id FROM public.cr_tenant WHERE slug = :slug FOR UPDATE"),
+            {"slug": slug.strip()},
+        ).scalar_one_or_none()
+        if tenant_id is None:
+            raise ValueError("Tenant does not exist")
+        _set_rls_tenant(session, tenant_id)
+        session.execute(
+            text("DELETE FROM public.cr_redmine_identity WHERE tenant_id = :tenant_id"),
+            {"tenant_id": str(tenant_id)},
+        )
+        for redmine_user_id, email in normalized:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO public.cr_redmine_identity
+                        (tenant_id, redmine_user_id, email)
+                    VALUES (:tenant_id, :redmine_user_id, :email)
+                    """
+                ),
+                {
+                    "tenant_id": str(tenant_id),
+                    "redmine_user_id": redmine_user_id,
+                    "email": email,
+                },
+            )
+        session.execute(
+            text(
+                """
+                INSERT INTO public.cr_redmine_identity_snapshot
+                    (tenant_id, redmine_group_id, identity_count, actor, synced_at)
+                VALUES (:tenant_id, :redmine_group_id, :identity_count, :actor, now())
+                ON CONFLICT (tenant_id) DO UPDATE SET
+                    redmine_group_id = EXCLUDED.redmine_group_id,
+                    identity_count = EXCLUDED.identity_count,
+                    actor = EXCLUDED.actor,
+                    synced_at = now()
+                """
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "redmine_group_id": redmine_group_id,
+                "identity_count": len(normalized),
+                "actor": normalized_actor,
+            },
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO public.cr_tenant_audit
+                    (tenant_id, actor, action, target, detail)
+                VALUES
+                    (:tenant_id, :actor, 'replace_redmine_identity_snapshot',
+                     'redmine', CAST(:detail AS jsonb))
+                """
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "actor": normalized_actor,
+                "detail": json.dumps(
+                    {
+                        "redmine_group_id": redmine_group_id,
+                        "identity_count": len(normalized),
+                    }
+                ),
+            },
+        )
         session.commit()
 
 

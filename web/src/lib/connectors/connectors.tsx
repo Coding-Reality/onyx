@@ -278,6 +278,50 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  redmine: {
+    description: "Configure a tenant-bound Redmine Wiki connector",
+    subtext:
+      "The platform operator must bind this Onyx tenant to the Redmine root before validation succeeds.",
+    values: [
+      {
+        type: "text",
+        label: "Redmine Base URL",
+        name: "base_url",
+        optional: false,
+        description: "The HTTPS origin for the authoritative Redmine instance.",
+      },
+      {
+        type: "number",
+        label: "Root Project ID",
+        name: "root_project_id",
+        optional: false,
+        description: "The operator-approved numeric Redmine tenant root ID.",
+      },
+      {
+        type: "checkbox",
+        label: "Include Subprojects",
+        name: "include_subprojects",
+        default: true,
+      },
+    ],
+    advanced_values: [
+      buildIncludeAttachmentsOption(false),
+      {
+        type: "number",
+        label: "Maximum Attachment Size (MB)",
+        name: "max_attachment_size_mb",
+        default: 100,
+      },
+      {
+        type: "list",
+        label: "Allowed Content Types",
+        name: "allowed_content_types",
+        optional: true,
+        description: "MIME patterns such as application/pdf and text/*.",
+      },
+    ],
+    overrideDefaultFreq: 10 * 60,
+  },
   github: {
     description: "Configure GitHub connector",
     values: [

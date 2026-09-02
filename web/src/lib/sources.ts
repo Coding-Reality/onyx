@@ -112,6 +112,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "LumApps",
     category: SourceCategory.Wiki,
   },
+  redmine: {
+    icon: SvgFileText,
+    displayName: "Redmine",
+    category: SourceCategory.Wiki,
+  },
   sharepoint: {
     icon: SvgSharepoint,
     displayName: "Sharepoint",

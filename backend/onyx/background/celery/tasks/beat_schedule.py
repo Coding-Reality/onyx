@@ -1,4 +1,5 @@
 import copy
+import os
 from datetime import timedelta
 from typing import Any
 
@@ -224,6 +225,21 @@ beat_task_templates: list[dict] = [
     },
 ]
 
+if os.environ.get("REDMINE_PERMISSION_SYNC_ENABLED", "false").lower() == "true":
+    beat_task_templates.append(
+        {
+            "name": "redmine-permission-reconciliation",
+            "task": OnyxCeleryTask.REDMINE_PERMISSION_RECONCILIATION,
+            "schedule": timedelta(seconds=30),
+            "options": {
+                "priority": OnyxCeleryPriority.HIGH,
+                "expires": 5 * 60,
+                "queue": OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+                "work_gated": True,
+            },
+        }
+    )
+
 # Mirror set_is_ee_based_on_env_variable(): EE features are active when either
 # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES or LICENSE_ENFORCEMENT_ENABLED is set.
 if ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:
@@ -319,6 +335,7 @@ _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-index-attempt-cleanup",
     "check-for-doc-permissions-sync",
     "check-for-external-group-sync",
+    "redmine-permission-reconciliation",
     "migrate-chunks-from-vespa-to-opensearch",
 }
 

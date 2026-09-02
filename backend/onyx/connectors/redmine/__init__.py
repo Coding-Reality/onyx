@@ -1,0 +1,1 @@
+"""Redmine connector package."""

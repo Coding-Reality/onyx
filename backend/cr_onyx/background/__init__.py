@@ -1,1 +1,1 @@
-"""Coding Reality Community Edition background extensions."""
+"""Coding Reality background extensions."""

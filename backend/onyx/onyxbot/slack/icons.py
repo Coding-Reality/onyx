@@ -57,6 +57,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.AIRTABLE: "Airtable.png",
     DocumentSource.HIGHSPOT: "Highspot.png",
     DocumentSource.DRUPAL_WIKI: "Drupal.png",
+    DocumentSource.REDMINE: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.IMAP: "Mail.png",
     DocumentSource.BITBUCKET: "Bitbucket.png",
     DocumentSource.TESTRAIL: "Testrail.png",

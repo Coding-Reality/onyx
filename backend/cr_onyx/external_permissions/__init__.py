@@ -1,0 +1,1 @@
+"""Community external-permission extensions."""
