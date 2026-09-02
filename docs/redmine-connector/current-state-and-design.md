@@ -1,6 +1,7 @@
 # Production Redmine connector assessment and design
 
-Status: native vertical slice implemented and unit-tested; production rollout remains gated.
+Status: production Wiki vertical slice deployed and acceptance-tested. Documents and
+Issues remain separately gated future phases.
 
 Assessment date: 2026-09-02 UTC.
 
@@ -22,11 +23,32 @@ one RevenueOS tenant
   -> one Redmine root and its approved descendants
 ```
 
-Do not enable the connector yet. The current Redmine automation credential reads
-all tenants. A staged RevenueOS `service=onyx` mapping and an explicit
-Redmine-to-Onyx identity projection are implemented in source but are not yet
-deployed. A tenant-scoped Redmine connector identity and end-to-end staging
-evidence are still required.
+The Coding Reality connector is enabled with its own non-admin, tenant-scoped
+Redmine identity. RevenueOS owns the immutable Redmine root/group to Onyx tenant
+mapping and projects the authoritative identity intersection every two minutes.
+Attachments and permission synchronization are enabled; Issues remain disabled.
+
+### Production closure evidence (2026-09-02)
+
+- Argo CD reports Onyx and Windmill synced and healthy at cloud revision
+  `d726675ac82784e548ffd27447dff34a6d50729a`.
+- All Onyx backend and worker workloads use the audited CE image built from
+  `e489e6a68`, pinned by digest. The web workload uses the matching connector UI
+  image built from `3eb108b91`.
+- The scoped Redmine credential sees ten approved Coding Reality projects,
+  including root project `1`, and zero foreign tenant roots.
+- The connector indexed Wiki create/update state incrementally, reconstructed a
+  parent/child page hierarchy, indexed a text attachment as a child document, and
+  preserved canonical Redmine links and normalized metadata.
+- A group removal produced an authoritative zero-identity snapshot and reduced
+  both PostgreSQL and OpenSearch ACLs to zero while the document remained private.
+  Restoring membership returned both ACLs to one.
+- Deleting the acceptance page and forcing authoritative prune removed its page,
+  hierarchy node, attachment document, and both unique OpenSearch canaries.
+- The recurring identity schedule completed successfully on the isolated
+  `revenueos-identity` worker tag with overlap disabled.
+- The focused final suite passed 42 Python tests, 13 Windmill projection
+  assertions, Ruff, and ty.
 
 ## Evidence labels
 
@@ -41,9 +63,10 @@ evidence are still required.
 
 - Argo CD application: `onyx`, healthy and synced.
 - Namespace: `onyx` on `crc-k3s`.
-- Helm chart: `0.8.19`; application revision: `2139265e59736f3f4067a05cd9aa67a110a3635a`.
+- Helm chart: `0.8.19`; cloud application revision:
+  `d726675ac82784e548ffd27447dff34a6d50729a`.
 - Product version: `v4.6.5`.
-- Backend image source commit: `e361f433516d6c20de8324ecaae572c3b1d5d965`.
+- Backend image source commit: `e489e6a68b1d56ccc8bc1329c6c3991bef9bc544`.
 - Backend image: private `ghcr.io/coding-reality/onyx-backend` build.
 - Web image: private `ghcr.io/coding-reality/onyx-web-server` build.
 - Local source is the `Coding-Reality/onyx` fork on `cr/main` at that backend commit.
@@ -149,7 +172,7 @@ as a required hidden project custom value.
 
 | RevenueOS tenant | Root project | Group | Registry state |
 |---|---:|---:|---|
-| `tenant-coding-reality` | 1 | 6 | staging |
+| `tenant-coding-reality` | 1 | 6 | active |
 | `tenant-andrew` | 2 | 7 | staging |
 | `tenant-deai-summit` | 3 | 8 | staging |
 | `tenant-tlm` | 66 | 89 | active |
@@ -502,25 +525,29 @@ REDMINE_PERMISSION_SYNC_ENABLED
 REDMINE_ISSUES_ENABLED
 ```
 
-Rollback: disable the connector pair, stop its scheduled sync, and delete its indexed
-documents through the normal Onyx connector deletion flow. Keep Redmine unchanged.
+Rollback: pause the connector pair, disable its scheduled identity sync, and delete
+its indexed documents through the asynchronous Onyx deletion-attempt flow. Do not
+use immediate credential dissociation on a pair with indexing history. Keep Redmine unchanged.
 Restore the previous application image and values through GitOps if code rollback is
 needed. Never delete source Redmine data during connector rollback.
 
 ## Production gates
 
-- Apply the staged authoritative RevenueOS-to-Onyx tenant integration mapping.
-- Put the matching Redmine mapping in the operator-owned Onyx control plane.
-- Provision and audit one tenant-scoped read-only Redmine account.
-- Prove that the account cannot enumerate another tenant root.
-- Keep the connector pair private to one staging credential owner.
-- Deploy the implemented CE Redmine-only permission reconciliation before multi-user use.
-- Pass bidirectional tenant canary tests in SQL, OpenSearch, search, and citations.
-- Enable permission sync only after explicit identity and revocation tests pass.
-- Enable metrics scraping and alerts for stale sync, failure, and prune state.
-- Record rollback output and connector document deletion proof.
+- [x] Apply the authoritative RevenueOS-to-Onyx tenant integration mapping.
+- [x] Put the matching Redmine mapping in the operator-owned Onyx control plane.
+- [x] Provision and audit one tenant-scoped, non-admin Redmine account.
+- [x] Prove that the account cannot enumerate another tenant root.
+- [x] Stage privately before switching the pair to permission synchronization.
+- [x] Deploy CE Redmine-only permission reconciliation before multi-user use.
+- [x] Pass tenant canary tests in SQL, OpenSearch, hierarchy, and source links.
+- [x] Enable permission sync only after explicit identity grant/revocation tests.
+- [x] Expose low-cardinality connector, attachment, permission, failure, and prune metrics.
+- [x] Prove source deletion and attachment removal through authoritative prune.
+- [x] Document a source-preserving GitOps rollback.
 
-Until these gates pass, the connector may run only in development fixtures.
+These gates close the Wiki vertical slice only. Documents, Files, Issues, Journals,
+and event-triggered refresh remain disabled until their own permission and scale
+acceptance tests pass.
 
 ## References
 
