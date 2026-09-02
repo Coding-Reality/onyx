@@ -39,3 +39,17 @@ def test_ce_extension_can_disable_enterprise_cloud_beat_tasks(monkeypatch) -> No
     )
 
     assert get_cloud_tasks(1.0) == []
+
+
+def test_ce_extension_restores_per_tenant_beat_tasks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "onyx.utils.variable_functionality.CE_EXTENSION_PACKAGE", "cr_onyx"
+    )
+    fetch_ce_extension_implementation.cache_clear()
+
+    get_tasks = fetch_ce_extension_implementation(
+        "onyx.background.celery.tasks.beat_schedule",
+        "get_tasks_to_schedule",
+    )
+
+    assert "check-for-indexing" in {task["name"] for task in get_tasks()}
