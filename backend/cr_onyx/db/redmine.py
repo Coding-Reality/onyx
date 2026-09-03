@@ -1,11 +1,16 @@
 from collections.abc import Collection
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.db.engine.sql_engine import get_catalog_session
+from onyx.db.engine.sql_engine import (
+    get_catalog_session,
+    get_session_with_current_tenant,
+)
+from onyx.db.enums import AccountType
+from onyx.db.models import User
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -97,6 +102,46 @@ def tenant_wiki_access(project_ids: Collection[int]) -> ExternalAccess:
             for row in rows
             if row.email and "@" in str(row.email)
         }
+        configured_service_accounts = session.execute(
+            text(
+                """
+                SELECT configuration #>
+                  '{integrations,redmine,service_account_emails}'
+                FROM public.cr_tenant
+                WHERE id = :tenant_id
+                """
+            ),
+            {"tenant_id": str(tenant_id)},
+        ).scalar_one_or_none()
+
+    if configured_service_accounts is None:
+        configured_service_accounts = []
+    if not isinstance(configured_service_accounts, list) or any(
+        not isinstance(email, str) for email in configured_service_accounts
+    ):
+        raise ConnectorValidationError(
+            "Redmine service account permission configuration is invalid"
+        )
+    requested_service_accounts = {
+        email.strip().lower() for email in configured_service_accounts
+    }
+    if requested_service_accounts:
+        with get_session_with_current_tenant() as tenant_session:
+            valid_service_accounts = set(
+                tenant_session.scalars(
+                    select(User.email).where(
+                        User.email.in_(requested_service_accounts),
+                        User.account_type == AccountType.SERVICE_ACCOUNT,
+                        User.is_active.is_(True),
+                    )
+                )
+            )
+        if valid_service_accounts != requested_service_accounts:
+            raise ConnectorValidationError(
+                "Redmine service account permission identity is not an active "
+                "Onyx service account"
+            )
+        emails.update(valid_service_accounts)
     return ExternalAccess(
         external_user_emails=emails,
         external_user_group_ids=set(),

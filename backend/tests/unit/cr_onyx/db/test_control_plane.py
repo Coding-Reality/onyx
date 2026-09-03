@@ -45,6 +45,7 @@ def test_redmine_binding_update_is_audited() -> None:
         base_url="https://redmine.example",
         root_project_id=1,
         redmine_group_id=6,
+        service_account_emails=[" Agent@Example.COM ", "agent@example.com"],
     )
 
     with patch("cr_onyx.db.control_plane.get_catalog_session", return_value=context):
@@ -60,6 +61,10 @@ def test_redmine_binding_update_is_audited() -> None:
     update_parameters = session.execute.call_args_list[3].args[1]
     assert '"existing": true' in update_parameters["configuration"]
     assert '"enabled": false' in update_parameters["configuration"]
+    assert (
+        '"service_account_emails": ["agent@example.com"]'
+        in update_parameters["configuration"]
+    )
     session.commit.assert_called_once()
 
 

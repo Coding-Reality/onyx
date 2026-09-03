@@ -13,6 +13,7 @@ class RedmineTenantBinding(BaseModel):
     base_url: str
     root_project_id: int = Field(gt=0)
     redmine_group_id: int = Field(gt=0)
+    service_account_emails: list[str] = Field(default_factory=list)
     enabled: bool = False
 
     @field_validator("base_url")
@@ -29,4 +30,12 @@ class RedmineTenantBinding(BaseModel):
             or parsed.fragment
         ):
             raise ValueError("Redmine tenant binding requires a clean HTTPS base URL")
+        return normalized
+
+    @field_validator("service_account_emails")
+    @classmethod
+    def validate_service_account_emails(cls, values: list[str]) -> list[str]:
+        normalized = sorted({value.strip().lower() for value in values})
+        if any(not value or "@" not in value for value in normalized):
+            raise ValueError("Redmine service account emails must be valid emails")
         return normalized
