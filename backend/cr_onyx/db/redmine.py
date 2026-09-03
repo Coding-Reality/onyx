@@ -1,7 +1,7 @@
 from collections.abc import Collection
 from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -129,8 +129,8 @@ def tenant_wiki_access(project_ids: Collection[int]) -> ExternalAccess:
         with get_session_with_current_tenant() as tenant_session:
             valid_service_accounts = set(
                 tenant_session.scalars(
-                    select(User.email).where(
-                        User.email.in_(requested_service_accounts),
+                    select(func.lower(User.email)).where(
+                        func.lower(User.email).in_(requested_service_accounts),
                         User.account_type == AccountType.SERVICE_ACCOUNT,
                         User.is_active.is_(True),
                     )
