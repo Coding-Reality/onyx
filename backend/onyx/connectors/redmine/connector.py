@@ -202,6 +202,22 @@ class RedmineConnector(
             self._permission_access = None
         return selected_projects
 
+    def _list_wiki_pages(
+        self, project: RedmineProject
+    ) -> list[RedmineWikiPageSummary]:
+        try:
+            return self._get_client().list_wiki_pages(project.identifier)
+        except RedmineClientError as error:
+            if error.status_code != 404:
+                raise
+            # Redmine returns 404 when a project has its Wiki module disabled.
+            # One such subproject must not prevent sibling projects from indexing.
+            logger.info(
+                "Skipping Redmine project %s because its Wiki is unavailable",
+                project.id,
+            )
+            return []
+
     @override
     def validate_connector_settings(self) -> None:
         try:
@@ -414,7 +430,7 @@ class RedmineConnector(
             return RedmineCheckpoint(has_more=False)
 
         project = projects[checkpoint.project_index]
-        summaries = self._get_client().list_wiki_pages(project.identifier)
+        summaries = self._list_wiki_pages(project)
         page_slice = summaries[
             checkpoint.page_offset : checkpoint.page_offset + self.batch_size
         ]
@@ -495,7 +511,7 @@ class RedmineConnector(
         for project in self._scoped_projects():
             if callback and callback.should_stop():
                 return
-            summaries = self._get_client().list_wiki_pages(project.identifier)
+            summaries = self._list_wiki_pages(project)
             for summary in summaries:
                 batch.append(SlimDocument(id=wiki_page_id(project.id, summary.title)))
                 if self.include_attachments:

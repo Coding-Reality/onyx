@@ -16,7 +16,9 @@ from onyx.server.metrics.redmine_connector import observe_api_request
 
 
 class RedmineClientError(RuntimeError):
-    pass
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class RedmineClient:
@@ -75,7 +77,8 @@ class RedmineClient:
             response.raise_for_status()
         except requests.HTTPError as error:
             raise RedmineClientError(
-                f"Redmine API request failed with status {response.status_code}"
+                f"Redmine API request failed with status {response.status_code}",
+                status_code=response.status_code,
             ) from error
         payload = response.json()
         if not isinstance(payload, dict):
