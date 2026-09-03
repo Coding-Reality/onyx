@@ -216,6 +216,48 @@ def test_page_failure_does_not_abort_checkpoint() -> None:
     assert checkpoint.page_offset == 1
 
 
+def test_project_without_wiki_advances_checkpoint() -> None:
+    connector = configured_connector()
+    fake_client = connector._client
+    assert isinstance(fake_client, FakeRedmineClient)
+
+    def fail_wiki(_project_identifier: str) -> list[RedmineWikiPageSummary]:
+        raise RedmineClientError("not found", status_code=404)
+
+    cast(Any, fake_client).list_wiki_pages = fail_wiki
+    values, checkpoint = drain_checkpoint(
+        connector.load_from_checkpoint(
+            NOW.timestamp() - 60,
+            NOW.timestamp() + 60,
+            RedmineCheckpoint(has_more=True, project_index=0),
+        )
+    )
+
+    assert any(isinstance(value, HierarchyNode) for value in values)
+    assert checkpoint == RedmineCheckpoint(
+        has_more=True, project_index=1, page_offset=0
+    )
+
+
+def test_project_wiki_authorization_failure_remains_fatal() -> None:
+    connector = configured_connector()
+    fake_client = connector._client
+    assert isinstance(fake_client, FakeRedmineClient)
+
+    def fail_wiki(_project_identifier: str) -> list[RedmineWikiPageSummary]:
+        raise RedmineClientError("forbidden", status_code=403)
+
+    cast(Any, fake_client).list_wiki_pages = fail_wiki
+    with pytest.raises(RedmineClientError, match="forbidden"):
+        drain_checkpoint(
+            connector.load_from_checkpoint(
+                NOW.timestamp() - 60,
+                NOW.timestamp() + 60,
+                RedmineCheckpoint(has_more=True, project_index=0),
+            )
+        )
+
+
 def test_visible_foreign_project_fails_closed() -> None:
     connector = configured_connector()
     fake_client = connector._client
