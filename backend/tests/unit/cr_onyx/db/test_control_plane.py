@@ -80,6 +80,30 @@ def test_redmine_binding_update_requires_actor() -> None:
         set_redmine_tenant_binding("coding-reality", binding, " ")
 
 
+def test_redmine_binding_parser_accepts_service_accounts() -> None:
+    args = _parser().parse_args(
+        [
+            "set-redmine-binding",
+            "--slug",
+            "coding-reality",
+            "--revenueos-tenant-id",
+            "tenant-coding-reality",
+            "--base-url",
+            "https://redmine.example",
+            "--root-project-id",
+            "1",
+            "--redmine-group-id",
+            "6",
+            "--service-account-email",
+            "agent@example.com",
+            "--actor",
+            "test",
+        ]
+    )
+
+    assert args.service_account_email == ["agent@example.com"]
+
+
 def test_redmine_identity_snapshot_is_atomic_and_audited() -> None:
     tenant_id = uuid.UUID("088b9a54-e144-58e7-a210-800f2201a6c1")
     tenant_result = MagicMock()

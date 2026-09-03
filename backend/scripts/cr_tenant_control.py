@@ -89,6 +89,7 @@ def _parser() -> argparse.ArgumentParser:
     redmine_parser.add_argument("--base-url", required=True)
     redmine_parser.add_argument("--root-project-id", required=True, type=int)
     redmine_parser.add_argument("--redmine-group-id", required=True, type=int)
+    redmine_parser.add_argument("--service-account-email", action="append", default=[])
     redmine_parser.add_argument("--actor", required=True)
     redmine_parser.add_argument("--enabled", action="store_true")
 
@@ -133,6 +134,7 @@ def main() -> None:
                 base_url=args.base_url,
                 root_project_id=args.root_project_id,
                 redmine_group_id=args.redmine_group_id,
+                service_account_emails=args.service_account_email,
                 enabled=args.enabled,
             ),
             args.actor,
