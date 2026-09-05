@@ -3,6 +3,39 @@ import re
 from onyx.connectors.models import TextSection
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+_KNOWLEDGE_METADATA_FIELDS = {
+    "organisation",
+    "project",
+    "subsystem",
+    "document_type",
+    "status",
+    "version",
+    "owner",
+    "environment",
+    "sensitivity",
+    "effective_date",
+}
+
+
+def extract_knowledge_metadata(text: str) -> dict[str, str]:
+    """Read a bounded metadata preamble from a Redmine Wiki page."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = normalized.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return {}
+
+    metadata: dict[str, str] = {}
+    for line in lines[1:52]:
+        if line.strip() == "---":
+            return metadata
+        if ":" not in line:
+            continue
+        key, raw_value = line.split(":", 1)
+        key = key.strip().lower()
+        value = raw_value.strip().strip("'\"")
+        if key in _KNOWLEDGE_METADATA_FIELDS and value:
+            metadata[key] = value[:500]
+    return {}
 
 
 def project_node_id(project_id: int) -> str:
