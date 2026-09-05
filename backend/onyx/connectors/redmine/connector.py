@@ -574,5 +574,5 @@ class RedmineConnector(
     ) -> HierarchyOutput:
         for project in self._scoped_projects():
             yield self._project_node(project)
-            for summary in self._get_client().list_wiki_pages(project.identifier):
+            for summary in self._list_wiki_pages(project):
                 yield self._page_node(project, summary)

@@ -273,6 +273,33 @@ def test_project_without_wiki_advances_checkpoint() -> None:
     )
 
 
+def test_project_without_wiki_is_skipped_during_hierarchy_enumeration() -> None:
+    connector = configured_connector()
+    fake_client = connector._client
+    assert isinstance(fake_client, FakeRedmineClient)
+
+    original = fake_client.list_wiki_pages
+
+    def fail_one_project(project_identifier: str) -> list[RedmineWikiPageSummary]:
+        if project_identifier == "project-a":
+            raise RedmineClientError("not found", status_code=404)
+        return original(project_identifier)
+
+    cast(Any, fake_client).list_wiki_pages = fail_one_project
+
+    nodes = list(connector.load_hierarchy(0, 0))
+
+    assert any(
+        isinstance(node, HierarchyNode) and node.raw_node_id == project_node_id(2)
+        for node in nodes
+    )
+    assert not any(
+        isinstance(node, HierarchyNode)
+        and node.raw_node_id.startswith("redmine:wiki:2:")
+        for node in nodes
+    )
+
+
 def test_project_wiki_authorization_failure_remains_fatal() -> None:
     connector = configured_connector()
     fake_client = connector._client
