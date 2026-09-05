@@ -43,6 +43,7 @@ from onyx.connectors.redmine.permissions import tenant_wiki_access
 from onyx.connectors.redmine.tenant_guard import enforce_tenant_binding
 from onyx.connectors.redmine.wiki import (
     attachment_document_id,
+    extract_knowledge_metadata,
     project_node_id,
     split_commonmark_sections,
     wiki_page_id,
@@ -297,6 +298,7 @@ class RedmineConnector(
         }
         if page.author_name:
             metadata["author"] = page.author_name
+        metadata.update(extract_knowledge_metadata(page.text))
         return Document(
             id=wiki_page_id(project.id, page.title),
             sections=split_commonmark_sections(

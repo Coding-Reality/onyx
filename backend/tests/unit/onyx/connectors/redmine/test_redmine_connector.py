@@ -28,6 +28,7 @@ from onyx.connectors.redmine.models import (
 )
 from onyx.connectors.redmine.wiki import (
     attachment_document_id,
+    extract_knowledge_metadata,
     project_node_id,
     split_commonmark_sections,
     wiki_page_id,
@@ -156,6 +157,39 @@ def test_split_commonmark_sections_keeps_fenced_heading_text() -> None:
     assert [section.heading for section in sections] == ["Deploy", "Check"]
     assert "# not a heading" in sections[0].text
     assert sections[1].text.startswith("Operations / Runbook / Check")
+
+
+def test_extract_knowledge_metadata_accepts_only_bounded_allowlist() -> None:
+    metadata = extract_knowledge_metadata(
+        "---\n"
+        "organisation: Coding Reality\n"
+        "project: Economic Intelligence\n"
+        "subsystem: canonical-state\n"
+        "document_type: runbook\n"
+        "status: current\n"
+        "version: 1.2\n"
+        "owner: Economic Intelligence Architect\n"
+        "environment: production\n"
+        "sensitivity: internal\n"
+        "effective_date: 2026-09-04\n"
+        "untrusted_override: ignored\n"
+        "---\n# Runbook\n"
+    )
+
+    assert metadata == {
+        "organisation": "Coding Reality",
+        "project": "Economic Intelligence",
+        "subsystem": "canonical-state",
+        "document_type": "runbook",
+        "status": "current",
+        "version": "1.2",
+        "owner": "Economic Intelligence Architect",
+        "environment": "production",
+        "sensitivity": "internal",
+        "effective_date": "2026-09-04",
+    }
+    assert extract_knowledge_metadata("# No preamble") == {}
+    assert extract_knowledge_metadata("---\nstatus: draft\n# no close") == {}
 
 
 def test_checkpoint_is_bounded_and_preserves_page_hierarchy() -> None:
