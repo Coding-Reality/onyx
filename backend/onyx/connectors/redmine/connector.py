@@ -203,9 +203,7 @@ class RedmineConnector(
             self._permission_access = None
         return selected_projects
 
-    def _list_wiki_pages(
-        self, project: RedmineProject
-    ) -> list[RedmineWikiPageSummary]:
+    def _list_wiki_pages(self, project: RedmineProject) -> list[RedmineWikiPageSummary]:
         try:
             return self._get_client().list_wiki_pages(project.identifier)
         except RedmineClientError as error:
