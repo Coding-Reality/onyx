@@ -86,7 +86,7 @@ def test_control_plane_role_is_resolved_under_current_tenant(
     assert user_tenant_mapping.get_new_user_role("user@example.com") == "user"
 
 
-def test_oauth_lookup_routes_unique_membership_from_another_host(
+def test_oauth_lookup_routes_unique_allowed_membership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     current_tenant = "tenant_11111111-1111-4111-8111-111111111111"
@@ -103,11 +103,8 @@ def test_oauth_lookup_routes_unique_membership_from_another_host(
     )
     monkeypatch.setattr(
         user_tenant_mapping,
-        "load_tenant_host_map",
-        lambda: {
-            "current.example.com": current_tenant,
-            "target.example.com": target_tenant,
-        },
+        "load_allowed_tenant_ids",
+        lambda: frozenset({current_tenant, target_tenant}),
     )
 
     assert (
@@ -138,12 +135,8 @@ def test_oauth_lookup_requires_selection_for_multiple_other_memberships(
     )
     monkeypatch.setattr(
         user_tenant_mapping,
-        "load_tenant_host_map",
-        lambda: {
-            "current.example.com": current_tenant,
-            "first.example.com": other_tenants[0],
-            "second.example.com": other_tenants[1],
-        },
+        "load_allowed_tenant_ids",
+        lambda: frozenset({current_tenant, *other_tenants}),
     )
 
     with pytest.raises(OnyxError, match="multiple tenants"):
