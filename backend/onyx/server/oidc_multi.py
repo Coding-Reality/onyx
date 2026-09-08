@@ -13,7 +13,7 @@ from typing import Any
 from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi_users.authentication import Strategy
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
@@ -229,6 +229,7 @@ def _callback_uri(
 async def oidc_login_for_provider(
     provider_name: str,
     request: Request,
+    redirect: bool = False,
     db_session: Session = Depends(get_session),
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
@@ -271,11 +272,15 @@ async def oidc_login_for_provider(
             extras_params=extras,
         )
 
-    response = JSONResponse(
-        content=OAuth2AuthorizeResponse(
-            authorization_url=authorization_url
-        ).model_dump()
-    )
+    response: Response
+    if redirect:
+        response = RedirectResponse(authorization_url, status_code=302)
+    else:
+        response = JSONResponse(
+            content=OAuth2AuthorizeResponse(
+                authorization_url=authorization_url
+            ).model_dump()
+        )
     _set_oauth_cookie(
         response,
         key=CSRF_TOKEN_COOKIE_NAME,

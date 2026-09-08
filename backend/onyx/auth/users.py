@@ -164,7 +164,10 @@ from onyx.utils.telemetry import (
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params, sanitize_next_url
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from onyx.utils.variable_functionality import (
+    fetch_ce_extension_implementation_with_fallback,
+    fetch_ee_implementation_or_noop,
+)
 from shared_configs.configs import (
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
@@ -2565,9 +2568,32 @@ async def complete_login_flow(
     referral_source = state_data.get("referral_source", None)
     # Drives the new_team redirect below. Resolving differently from the login
     # itself would greet a returning user as a brand new signup.
-    tenant_id = fetch_ee_implementation_or_noop(
-        "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
-    )(account_email, oauth_client.name, account_id)
+    try:
+        tenant_id = fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
+        )(account_email, oauth_client.name, account_id)
+    except exceptions.UserNotExists as error:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "This account does not have access to an Onyx tenant.",
+        ) from error
+
+    tenant_reroute = fetch_ce_extension_implementation_with_fallback(
+        "onyx.server.manage.sso.policy",
+        "get_tenant_sso_reroute_url",
+        lambda _tenant_id, _provider_name, _next_url: None,
+    )(tenant_id, oauth_client.name, next_url)
+    if tenant_reroute is not None:
+        parsed_reroute = urlparse(tenant_reroute)
+        if (
+            parsed_reroute.scheme not in {"http", "https"}
+            or not parsed_reroute.hostname
+            or parsed_reroute.username is not None
+            or parsed_reroute.password is not None
+            or parsed_reroute.fragment
+        ):
+            raise RuntimeError("CE extension returned an invalid tenant login URL")
+        return RedirectResponse(tenant_reroute, status_code=302)
 
     # Snapshot the raw IdP claims for directory-profile enrichment and the admin
     # "OAuth Test" page. The subject-resolved tenant keeps capture working after
