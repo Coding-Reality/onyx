@@ -40,6 +40,25 @@ def load_tenant_host_map(raw_value: str | None = None) -> Mapping[str, str]:
     return tenant_host_map
 
 
+def load_allowed_tenant_ids(raw_value: str | None = None) -> frozenset[str]:
+    raw_value = (
+        raw_value
+        if raw_value is not None
+        else os.environ.get("CR_ONYX_ALLOWED_TENANT_IDS")
+    )
+    if raw_value is None:
+        return frozenset(load_tenant_host_map().values())
+
+    parsed = json.loads(raw_value)
+    if not isinstance(parsed, list):
+        raise ValueError("CR_ONYX_ALLOWED_TENANT_IDS must be a JSON array")
+
+    tenant_ids = frozenset(str(value).strip() for value in parsed)
+    if not tenant_ids or any(not validate_tenant_id(value) for value in tenant_ids):
+        raise ValueError("CR_ONYX_ALLOWED_TENANT_IDS contains an invalid tenant ID")
+    return tenant_ids
+
+
 def get_tenant_context() -> TenantContext:
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     if tenant_id is None:

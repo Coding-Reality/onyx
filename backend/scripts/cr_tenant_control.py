@@ -9,6 +9,7 @@ from cr_onyx.db.control_plane import (
     apply_control_plane_migration,
     create_tenant,
     remove_tenant_user,
+    retain_tenant_hosts,
     set_redmine_tenant_binding,
     set_tenant_status,
     tenant_host_map,
@@ -64,7 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     create_parser.add_argument("--id", required=True, type=uuid.UUID)
     create_parser.add_argument("--slug", required=True)
     create_parser.add_argument("--name", required=True)
-    create_parser.add_argument("--host", action="append", required=True)
+    create_parser.add_argument("--host", action="append", default=[])
     create_parser.add_argument("--configuration", default="{}")
     create_parser.add_argument("--skip-initialize", action="store_true")
 
@@ -82,6 +83,9 @@ def _parser() -> argparse.ArgumentParser:
     remove_user_parser = subparsers.add_parser("remove-user")
     remove_user_parser.add_argument("--slug", required=True)
     remove_user_parser.add_argument("--email", required=True)
+
+    retain_hosts_parser = subparsers.add_parser("retain-hosts")
+    retain_hosts_parser.add_argument("--host", action="append", required=True)
 
     redmine_parser = subparsers.add_parser("set-redmine-binding")
     redmine_parser.add_argument("--slug", required=True)
@@ -125,6 +129,9 @@ def main() -> None:
         return
     if args.command == "remove-user":
         remove_tenant_user(args.slug, args.email)
+        return
+    if args.command == "retain-hosts":
+        retain_tenant_hosts(args.host)
         return
     if args.command == "set-redmine-binding":
         set_redmine_tenant_binding(

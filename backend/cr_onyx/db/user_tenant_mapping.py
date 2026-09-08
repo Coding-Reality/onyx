@@ -5,7 +5,7 @@ from fastapi_users import exceptions as fastapi_users_exceptions
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from cr_onyx.tenancy.context import load_tenant_host_map
+from cr_onyx.tenancy.context import load_allowed_tenant_ids
 from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -80,7 +80,7 @@ def _resolve_membership(
 
     matches = [
         tenant_id
-        for tenant_id in dict.fromkeys(load_tenant_host_map().values())
+        for tenant_id in load_allowed_tenant_ids()
         if tenant_id != current_tenant_id and membership_in(tenant_id) == tenant_id
     ]
     if not matches:

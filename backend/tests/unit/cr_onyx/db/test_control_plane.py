@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from cr_onyx.db.control_plane import (
     replace_redmine_identity_snapshot,
+    retain_tenant_hosts,
     schema_name_for_tenant,
     set_redmine_tenant_binding,
 )
@@ -21,6 +22,41 @@ def test_schema_name_for_tenant_is_upstream_compatible() -> None:
 def test_invalid_uuid_is_rejected_before_schema_creation() -> None:
     with pytest.raises(ValueError):
         uuid.UUID("coding-reality")
+
+
+def test_tenant_create_parser_allows_no_public_hostname() -> None:
+    args = _parser().parse_args(
+        [
+            "create-tenant",
+            "--id",
+            "088b9a54-e144-58e7-a210-800f2201a6c1",
+            "--slug",
+            "m2a",
+            "--name",
+            "M2Adverts",
+        ]
+    )
+    assert args.host == []
+
+
+def test_retain_tenant_hosts_removes_every_other_host() -> None:
+    result = MagicMock()
+    result.scalars.return_value = [
+        "onyx.cloud.coding-reality.com",
+        "legacy.example.com",
+    ]
+    session = MagicMock()
+    session.execute.side_effect = [result, MagicMock()]
+    context = MagicMock()
+    context.__enter__.return_value = session
+
+    with patch("cr_onyx.db.control_plane.get_catalog_session", return_value=context):
+        retain_tenant_hosts(["onyx.cloud.coding-reality.com"])
+
+    assert session.execute.call_count == 2
+    delete_parameters = session.execute.call_args_list[1].args[1]
+    assert delete_parameters == {"hostname": "legacy.example.com"}
+    session.commit.assert_called_once()
 
 
 def test_redmine_binding_update_is_audited() -> None:

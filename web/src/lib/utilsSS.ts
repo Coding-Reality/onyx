@@ -1,11 +1,10 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import {
   HOST_URL,
   INTERNAL_URL,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./constants";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
-import { selectTenantHost } from "./tenantHost";
 
 export function processCookies(cookies: ReadonlyRequestCookies): string {
   let cookieString = cookies
@@ -89,25 +88,14 @@ export class UrlBuilder {
 
 export async function fetchSS(url: string, options?: RequestInit) {
   const cookieString = processCookies(await cookies());
-  const incomingHeaders = await headers();
-  const requestHost = (
-    incomingHeaders.get("x-forwarded-host") ?? incomingHeaders.get("host")
-  )
-    ?.split(",", 1)[0]
-    ?.trim();
   const configuredHost = new URL(HOST_URL).host;
-  const tenantHost = selectTenantHost(requestHost, configuredHost);
   const requestHeaders = new Headers(options?.headers);
   requestHeaders.set("cookie", cookieString);
 
-  // INTERNAL_URL points at the Kubernetes service, but tenancy is resolved
-  // from an operator-owned external host map. Preserve the incoming tenant
-  // host during server rendering and use WEB_DOMAIN only without request
-  // context. The backend still rejects every host absent from its trusted map.
-  if (tenantHost) {
-    requestHeaders.set("host", tenantHost);
-    requestHeaders.set("x-forwarded-host", tenantHost);
-  }
+  // All browser and server-rendered requests use the single operator-owned
+  // Onyx origin. The backend derives authenticated tenancy from the session.
+  requestHeaders.set("host", configuredHost);
+  requestHeaders.set("x-forwarded-host", configuredHost);
 
   const init: RequestInit = {
     credentials: "include",

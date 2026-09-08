@@ -65,28 +65,5 @@ def test_multi_tenant_web_domain_comes_from_ce_extension() -> None:
         assert sso_web_domain(request) == "https://tenant-a.example.com"
 
 
-def test_cr_extension_reroutes_login_to_resolved_tenant() -> None:
-    with (
-        patch(
-            "cr_onyx.server.manage.sso.policy.get_current_tenant_id",
-            return_value="tenant_current",
-        ),
-        patch(
-            "cr_onyx.server.manage.sso.policy.load_tenant_host_map",
-            return_value={"m2a.example.com": "tenant_m2a"},
-        ),
-    ):
-        url = get_tenant_sso_reroute_url("tenant_m2a", "keycloak", "/app?from=login")
-
-    assert url == (
-        "https://m2a.example.com/api/auth/oidc/keycloak/authorize?"
-        "next=%2Fapp%3Ffrom%3Dlogin&redirect=true"
-    )
-
-
-def test_cr_extension_does_not_reroute_current_tenant() -> None:
-    with patch(
-        "cr_onyx.server.manage.sso.policy.get_current_tenant_id",
-        return_value="tenant_m2a",
-    ):
-        assert get_tenant_sso_reroute_url("tenant_m2a", "keycloak", "/") is None
+def test_cr_extension_keeps_resolved_tenant_on_shared_origin() -> None:
+    assert get_tenant_sso_reroute_url("tenant_m2a", "keycloak", "/") is None
