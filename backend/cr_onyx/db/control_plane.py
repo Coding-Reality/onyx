@@ -110,6 +110,29 @@ def set_tenant_status(slug: str, status: str) -> None:
         session.commit()
 
 
+def retain_tenant_hosts(hostnames: Sequence[str]) -> None:
+    """Delete every legacy tenant hostname except the shared public origin."""
+    normalized_hosts = sorted(
+        {hostname.strip().lower().rstrip(".") for hostname in hostnames}
+    )
+    if not normalized_hosts or any(not hostname for hostname in normalized_hosts):
+        raise ValueError("At least one retained tenant host is required")
+
+    with get_catalog_session() as session:
+        existing_hosts = session.execute(
+            text("SELECT hostname FROM public.cr_tenant_host")
+        ).scalars()
+        for hostname in existing_hosts:
+            if hostname not in normalized_hosts:
+                session.execute(
+                    text(
+                        "DELETE FROM public.cr_tenant_host WHERE hostname = :hostname"
+                    ),
+                    {"hostname": hostname},
+                )
+        session.commit()
+
+
 def set_redmine_tenant_binding(
     slug: str,
     binding: RedmineTenantBinding,
