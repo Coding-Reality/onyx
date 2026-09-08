@@ -5,6 +5,7 @@ import {
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./constants";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
+import { selectTenantHost } from "./tenantHost";
 
 export function processCookies(cookies: ReadonlyRequestCookies): string {
   let cookieString = cookies
@@ -95,15 +96,14 @@ export async function fetchSS(url: string, options?: RequestInit) {
     ?.split(",", 1)[0]
     ?.trim();
   const configuredHost = new URL(HOST_URL).host;
-  const tenantHost = configuredHost || requestHost;
+  const tenantHost = selectTenantHost(requestHost, configuredHost);
   const requestHeaders = new Headers(options?.headers);
   requestHeaders.set("cookie", cookieString);
 
   // INTERNAL_URL points at the Kubernetes service, but tenancy is resolved
-  // from an operator-owned external host map. WEB_DOMAIN is the authoritative
-  // external host for this server instance; Next.js may normalize request
-  // context headers to its internal service name during server rendering.
-  // The backend still fails closed if this configured host is not mapped.
+  // from an operator-owned external host map. Preserve the incoming tenant
+  // host during server rendering and use WEB_DOMAIN only without request
+  // context. The backend still rejects every host absent from its trusted map.
   if (tenantHost) {
     requestHeaders.set("host", tenantHost);
     requestHeaders.set("x-forwarded-host", tenantHost);
