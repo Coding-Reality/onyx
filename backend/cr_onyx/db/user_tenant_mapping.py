@@ -5,7 +5,10 @@ from fastapi_users import exceptions as fastapi_users_exceptions
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from cr_onyx.tenancy.context import load_tenant_host_map
 from onyx.db.engine.sql_engine import get_catalog_session
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -37,11 +40,13 @@ def _resolve_membership(
     if (oauth_name is None) != (account_id is None):
         raise fastapi_users_exceptions.UserNotExists()
 
-    tenant_id = get_current_tenant_id()
-    with _tenant_catalog_session(tenant_id) as session:
-        row = session.execute(
-            text(
-                """
+    current_tenant_id = get_current_tenant_id()
+
+    def membership_in(tenant_id: str) -> str | None:
+        with _tenant_catalog_session(tenant_id) as session:
+            return session.execute(
+                text(
+                    """
                 SELECT tenant.schema_name
                 FROM public.cr_tenant_membership AS membership
                 JOIN public.cr_tenant AS tenant ON tenant.id = membership.tenant_id
@@ -60,18 +65,32 @@ def _resolve_membership(
                     ))
                   )
                 """
-            ),
-            {
-                "tenant_id": _tenant_uuid(tenant_id),
-                "email": _normalized_email(email),
-                "oauth_name": oauth_name,
-                "account_id": account_id,
-                "oauth_identity_supplied": oauth_name is not None,
-            },
-        ).scalar_one_or_none()
-    if row != tenant_id:
+                ),
+                {
+                    "tenant_id": _tenant_uuid(tenant_id),
+                    "email": _normalized_email(email),
+                    "oauth_name": oauth_name,
+                    "account_id": account_id,
+                    "oauth_identity_supplied": oauth_name is not None,
+                },
+            ).scalar_one_or_none()
+
+    if membership_in(current_tenant_id) == current_tenant_id:
+        return current_tenant_id
+
+    matches = [
+        tenant_id
+        for tenant_id in dict.fromkeys(load_tenant_host_map().values())
+        if tenant_id != current_tenant_id and membership_in(tenant_id) == tenant_id
+    ]
+    if not matches:
         raise fastapi_users_exceptions.UserNotExists()
-    return tenant_id
+    if len(matches) > 1:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This account can access multiple tenants. Select a tenant first.",
+        )
+    return matches[0]
 
 
 def get_tenant_id_for_email(email: str) -> str:

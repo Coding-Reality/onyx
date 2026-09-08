@@ -6,6 +6,8 @@ import pytest
 from cr_onyx.db import user_tenant_mapping
 from fastapi_users import exceptions
 
+from onyx.error_handling.exceptions import OnyxError
+
 TENANT_ID = "tenant_5541b68e-2c9e-5e7a-b6a9-528022b4471a"
 
 
@@ -82,3 +84,69 @@ def test_control_plane_role_is_resolved_under_current_tenant(
     monkeypatch.setattr(user_tenant_mapping, "_tenant_catalog_session", session)
     monkeypatch.setattr(user_tenant_mapping, "get_current_tenant_id", lambda: TENANT_ID)
     assert user_tenant_mapping.get_new_user_role("user@example.com") == "user"
+
+
+def test_oauth_lookup_routes_unique_membership_from_another_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current_tenant = "tenant_11111111-1111-4111-8111-111111111111"
+    target_tenant = "tenant_22222222-2222-4222-8222-222222222222"
+
+    @contextmanager
+    def session(tenant_id: str):
+        value = target_tenant if tenant_id == target_tenant else None
+        yield SimpleNamespace(execute=lambda _statement, _params: _Result(value))
+
+    monkeypatch.setattr(user_tenant_mapping, "_tenant_catalog_session", session)
+    monkeypatch.setattr(
+        user_tenant_mapping, "get_current_tenant_id", lambda: current_tenant
+    )
+    monkeypatch.setattr(
+        user_tenant_mapping,
+        "load_tenant_host_map",
+        lambda: {
+            "current.example.com": current_tenant,
+            "target.example.com": target_tenant,
+        },
+    )
+
+    assert (
+        user_tenant_mapping.resolve_tenant_id(
+            "user@example.com", "keycloak", "subject-123"
+        )
+        == target_tenant
+    )
+
+
+def test_oauth_lookup_requires_selection_for_multiple_other_memberships(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current_tenant = "tenant_11111111-1111-4111-8111-111111111111"
+    other_tenants = (
+        "tenant_22222222-2222-4222-8222-222222222222",
+        "tenant_33333333-3333-4333-8333-333333333333",
+    )
+
+    @contextmanager
+    def session(tenant_id: str):
+        value = tenant_id if tenant_id in other_tenants else None
+        yield SimpleNamespace(execute=lambda _statement, _params: _Result(value))
+
+    monkeypatch.setattr(user_tenant_mapping, "_tenant_catalog_session", session)
+    monkeypatch.setattr(
+        user_tenant_mapping, "get_current_tenant_id", lambda: current_tenant
+    )
+    monkeypatch.setattr(
+        user_tenant_mapping,
+        "load_tenant_host_map",
+        lambda: {
+            "current.example.com": current_tenant,
+            "first.example.com": other_tenants[0],
+            "second.example.com": other_tenants[1],
+        },
+    )
+
+    with pytest.raises(OnyxError, match="multiple tenants"):
+        user_tenant_mapping.resolve_tenant_id(
+            "user@example.com", "keycloak", "subject-123"
+        )

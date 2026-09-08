@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from fastapi import Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import (
@@ -119,6 +121,50 @@ def test_build_client_google_uses_provider_name() -> None:
     provider = _provider(name="google", provider_type=SSOProviderType.GOOGLE_OAUTH)
     client = oidc_multi._build_client(provider, dict(_GOOGLE_CONFIG))
     assert client.name == "google"
+
+
+@pytest.mark.asyncio
+async def test_authorize_can_redirect_browser_directly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Client:
+        async def get_authorization_url(self, *_args: Any, **_kwargs: Any) -> str:
+            return "https://idp.example.com/authorize"
+
+    provider = _provider()
+    monkeypatch.setattr(
+        oidc_multi, "_resolve_oidc_provider", lambda *_args: (provider, _OIDC_CONFIG)
+    )
+
+    async def get_client(*_args: Any) -> _Client:
+        return _Client()
+
+    monkeypatch.setattr(oidc_multi, "_get_oauth_client", get_client)
+    monkeypatch.setattr(
+        oidc_multi,
+        "_callback_uri",
+        lambda *_args: "https://tenant.example.com/callback",
+    )
+    monkeypatch.setattr(oidc_multi, "get_current_tenant_id", lambda: "tenant_one")
+    monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", "unit-test-secret")
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/auth/oidc/okta/authorize",
+            "headers": [],
+            "query_string": b"next=%2Fapp&redirect=true",
+        }
+    )
+
+    response = await oidc_multi.oidc_login_for_provider(
+        "okta", request, redirect=True, db_session=_DB
+    )
+
+    assert isinstance(response, RedirectResponse)
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://idp.example.com/authorize"
+    assert CSRF_TOKEN_COOKIE_NAME in response.headers["set-cookie"]
 
 
 def test_build_client_oidc_uses_provider_name(monkeypatch: pytest.MonkeyPatch) -> None:
