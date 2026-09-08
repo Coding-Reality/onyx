@@ -46,8 +46,8 @@ def create_tenant(
     normalized_hosts = sorted(
         {hostname.strip().lower().rstrip(".") for hostname in hostnames}
     )
-    if not normalized_hosts or any(not hostname for hostname in normalized_hosts):
-        raise ValueError("At least one non-empty tenant host is required")
+    if any(not hostname for hostname in normalized_hosts):
+        raise ValueError("Tenant hosts must not be empty")
 
     with get_catalog_session() as session:
         session.execute(CreateSchema(schema_name, if_not_exists=True))
@@ -72,6 +72,10 @@ def create_tenant(
             },
         )
         _set_rls_tenant(session, tenant_id)
+        session.execute(
+            text("DELETE FROM public.cr_tenant_host WHERE tenant_id = :tenant_id"),
+            {"tenant_id": str(tenant_id)},
+        )
         for hostname in normalized_hosts:
             session.execute(
                 text(

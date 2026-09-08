@@ -64,7 +64,7 @@ def _parser() -> argparse.ArgumentParser:
     create_parser.add_argument("--id", required=True, type=uuid.UUID)
     create_parser.add_argument("--slug", required=True)
     create_parser.add_argument("--name", required=True)
-    create_parser.add_argument("--host", action="append", required=True)
+    create_parser.add_argument("--host", action="append", default=[])
     create_parser.add_argument("--configuration", default="{}")
     create_parser.add_argument("--skip-initialize", action="store_true")
 

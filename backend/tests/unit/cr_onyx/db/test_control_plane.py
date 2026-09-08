@@ -23,6 +23,21 @@ def test_invalid_uuid_is_rejected_before_schema_creation() -> None:
         uuid.UUID("coding-reality")
 
 
+def test_tenant_create_parser_allows_no_public_hostname() -> None:
+    args = _parser().parse_args(
+        [
+            "create-tenant",
+            "--id",
+            "088b9a54-e144-58e7-a210-800f2201a6c1",
+            "--slug",
+            "m2a",
+            "--name",
+            "M2Adverts",
+        ]
+    )
+    assert args.host == []
+
+
 def test_redmine_binding_update_is_audited() -> None:
     tenant_id = uuid.UUID("088b9a54-e144-58e7-a210-800f2201a6c1")
     tenant_result = MagicMock()
