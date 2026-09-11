@@ -5,6 +5,7 @@ network, no live IdP."""
 
 from types import SimpleNamespace
 from typing import Any, cast
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi import Request
@@ -43,6 +44,92 @@ def _provider(**overrides: object) -> SSOProvider:
     )
     base.update(overrides)
     return cast(SSOProvider, SimpleNamespace(**base))
+
+
+def test_logout_url_uses_discovered_https_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = cast(
+        Any,
+        SimpleNamespace(
+            openid_configuration={
+                "end_session_endpoint": "https://idp.example.com/logout"
+            }
+        ),
+    )
+    request = cast(Request, object())
+    monkeypatch.setattr(
+        oidc_multi, "sso_web_domain", lambda _request: "https://tenant.example.com"
+    )
+
+    url = oidc_multi._logout_url(client, _OIDC_CONFIG, request)
+
+    assert url is not None
+    parsed = urlparse(url)
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "idp.example.com"
+    assert parsed.path == "/logout"
+    assert parse_qs(parsed.query) == {
+        "client_id": ["cid"],
+        "post_logout_redirect_uri": ["https://tenant.example.com/auth/login"],
+    }
+
+
+@pytest.mark.parametrize(
+    "discovery",
+    [
+        {},
+        {"end_session_endpoint": "http://idp.example.com/logout"},
+        {"end_session_endpoint": "/logout"},
+    ],
+)
+def test_logout_url_rejects_missing_or_non_https_endpoint(
+    discovery: dict[str, str],
+) -> None:
+    client = cast(Any, SimpleNamespace(openid_configuration=discovery))
+
+    assert oidc_multi._logout_url(client, _OIDC_CONFIG, cast(Request, object())) is None
+
+
+@pytest.mark.asyncio
+async def test_oidc_logout_url_resolves_users_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _provider(name="keycloak")
+    user = cast(
+        Any,
+        SimpleNamespace(
+            oauth_accounts=[SimpleNamespace(oauth_name="keycloak")],
+        ),
+    )
+    client = cast(
+        Any,
+        SimpleNamespace(
+            openid_configuration={
+                "end_session_endpoint": "https://idp.example.com/logout"
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        oidc_multi,
+        "_resolve_oidc_provider",
+        lambda _db, _provider_name: (provider, _OIDC_CONFIG),
+    )
+
+    async def get_client(*_args: Any) -> Any:
+        return client
+
+    monkeypatch.setattr(oidc_multi, "_get_oauth_client", get_client)
+    monkeypatch.setattr(
+        oidc_multi, "sso_web_domain", lambda _request: "https://tenant.example.com"
+    )
+
+    result = await oidc_multi.oidc_logout_url(
+        cast(Request, object()), user=user, db_session=_DB
+    )
+
+    assert result["logout_url"] is not None
+    assert parse_qs(urlparse(result["logout_url"]).query)["client_id"] == ["cid"]
 
 
 def test_resolve_oidc_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:

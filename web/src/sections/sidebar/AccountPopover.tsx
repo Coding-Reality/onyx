@@ -66,10 +66,18 @@ function SettingsPopover({
   };
 
   const handleLogout = () => {
-    logout()
+    logout(true)
       .then((response) => {
         if (!response?.ok) {
           alert("Failed to logout");
+          return;
+        }
+
+        const federatedLogoutUrl = response.headers.get(
+          "X-Onyx-Federated-Logout-Url"
+        );
+        if (federatedLogoutUrl) {
+          window.location.assign(federatedLogoutUrl);
           return;
         }
 

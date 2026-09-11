@@ -18,8 +18,9 @@ export async function getCurrentUser(): Promise<User | null> {
   return user;
 }
 
-export async function logout(): Promise<Response> {
-  const response = await fetch("/auth/logout", {
+export async function logout(federated = false): Promise<Response> {
+  const path = federated ? "/auth/logout?federated=true" : "/auth/logout";
+  const response = await fetch(path, {
     method: "POST",
     credentials: "include",
   });
