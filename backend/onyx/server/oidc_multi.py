@@ -9,6 +9,7 @@ import hashlib
 import json
 import uuid
 from typing import Any
+from urllib.parse import urlencode, urlparse
 
 from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Request, Response
@@ -30,6 +31,7 @@ from onyx.auth.users import (
     UserManager,
     auth_backend,
     complete_login_flow,
+    current_user,
     decode_and_validate_oauth_state,
     generate_csrf_token,
     generate_pkce_pair,
@@ -223,6 +225,49 @@ def _callback_uri(
     # the signed state.
     web_domain = sso_web_domain(request) if request is not None else WEB_DOMAIN
     return sso_login_callback_uri(provider, config, web_domain)
+
+
+def _logout_url(
+    client: BaseOAuth2[Any], config: dict[str, Any], request: Request
+) -> str | None:
+    discovery = getattr(client, "openid_configuration", None) or {}
+    endpoint = discovery.get("end_session_endpoint")
+    if not isinstance(endpoint, str):
+        return None
+    parsed_endpoint = urlparse(endpoint)
+    if parsed_endpoint.scheme != "https" or not parsed_endpoint.netloc:
+        return None
+    return_to = f"{sso_web_domain(request)}/auth/login"
+    separator = "&" if parsed_endpoint.query else "?"
+    return (
+        endpoint
+        + separator
+        + urlencode(
+            {
+                "client_id": config["client_id"],
+                "post_logout_redirect_uri": return_to,
+            }
+        )
+    )
+
+
+@router.get("/logout-url")
+async def oidc_logout_url(
+    request: Request,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> dict[str, str | None]:
+    """Return the current user's tenant-bound OIDC end-session URL."""
+    for account in user.oauth_accounts:
+        try:
+            provider, config = _resolve_oidc_provider(db_session, account.oauth_name)
+        except OnyxError:
+            continue
+        if provider.provider_type is not SSOProviderType.OIDC:
+            continue
+        client = await _get_oauth_client(provider, config)
+        return {"logout_url": _logout_url(client, config, request)}
+    return {"logout_url": None}
 
 
 @router.get("/{provider_name}/authorize")

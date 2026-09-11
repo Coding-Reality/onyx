@@ -1,8 +1,13 @@
-import { logoutSS } from "@/lib/auth/svcSS";
+import { getFederatedLogoutUrlSS, logoutSS } from "@/lib/auth/svcSS";
 import { SERVER_SIDE_ONLY__AUTH_COOKIE_NAME } from "@/lib/constants";
 import { NextRequest } from "next/server";
 
 export const POST = async (request: NextRequest) => {
+  const federated = request.nextUrl.searchParams.get("federated") === "true";
+  const federatedLogoutUrl = federated
+    ? await getFederatedLogoutUrlSS(request.headers)
+    : null;
+
   // Proxies logout to the backend /auth/logout endpoint.
   // Needed since env variables don't work well on the client-side
   const response = await logoutSS(request.headers);
@@ -25,6 +30,10 @@ export const POST = async (request: NextRequest) => {
   };
 
   const headers = new Headers();
+
+  if (federatedLogoutUrl) {
+    headers.set("X-Onyx-Federated-Logout-Url", federatedLogoutUrl);
+  }
 
   cookiesToDelete.forEach((cookieName) => {
     headers.append(

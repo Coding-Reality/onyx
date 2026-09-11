@@ -85,6 +85,24 @@ export async function logoutSS(headers: Headers): Promise<Response | null> {
   return logoutStandardSS(headers);
 }
 
+export async function getFederatedLogoutUrlSS(
+  headers: Headers
+): Promise<string | null> {
+  try {
+    const response = await fetchSS("/auth/oidc/logout-url", { headers });
+    if (!response.ok) {
+      return null;
+    }
+
+    const body: { logout_url?: unknown } = await response.json();
+    return typeof body.logout_url === "string" ? body.logout_url : null;
+  } catch {
+    // Federated logout is best effort. Local logout must still succeed if the
+    // identity provider or its discovery endpoint is temporarily unavailable.
+    return null;
+  }
+}
+
 export async function authErrorRedirect(
   request: NextRequest,
   response: Response,
